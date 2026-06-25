@@ -280,49 +280,31 @@ target_addr: target is br_target [ target = br_target * 4; ] { export *[code]:4 
     b = Addr1;
 }
 
-# LD / MOV Memory-to-Memory
-:^AluPrefix^"mov " Addr0 ", " Addr1_e is op=7 & AluPrefix & (op18=0 | op18=1) & Addr0 & Addr1_e {
-    Addr1_e = Addr0;
-}
-:^AluPrefix^"mov " Addr0_e ", " Addr1 is op=7 & AluPrefix & op18=2 & Addr0_e & Addr1 {
-    Addr1 = Addr0_e;
-}
-:^AluPrefix^"mov " Addr0 ", " Addr1_b is op=7 & AluPrefix & op18=3 & Addr0 & Addr1_b {
-    Addr1_b = Addr0;
-}
-:^AluPrefix^"mov " Addr0_b ", " Addr1 is op=7 & AluPrefix & op18=4 & Addr0_b & Addr1 {
-    Addr1 = Addr0_b;
-}
-:^AluPrefix^"mov " Addr0_o ", " Addr1 is op=7 & AluPrefix & op18=5 & Addr0_o & Addr1 {
-    Addr1 = Addr0_o;
-}
-
-# LD / MOV Register-to-Memory & Memory-to-Register & Register-to-Register
-:^AluPrefix^"mov " reg2 ", " Addr0 is op=7 & AluPrefix & op18=7 & mov_sub=0 & Addr0 & reg2 {
+# LD / MOV - Decoded solely by mov_sub (bits 15-17) like MAME
+:^AluPrefix^"mov " reg2 ", " Addr0 is op=7 & AluPrefix & mov_sub=0 & Addr0 & reg2 {
     Addr0 = reg2;
 }
-:^AluPrefix^"mov " reg2 ", " Addr0_e is op=7 & AluPrefix & op18=7 & mov_sub=1 & Addr0_e & reg2 {
+:^AluPrefix^"mov " reg2 ", " Addr0_e is op=7 & AluPrefix & mov_sub=1 & Addr0_e & reg2 {
     Addr0_e = reg2;
 }
-:^AluPrefix^"mov " Addr1_b ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=2 & Addr1_b & reg2 {
+:^AluPrefix^"mov " Addr1_b ", " reg2 is op=7 & AluPrefix & mov_sub=2 & Addr1_b & reg2 {
     reg2 = Addr1_b;
 }
-:^AluPrefix^"mov " Addr1 ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=3 & Addr1 & reg2 {
+:^AluPrefix^"mov " Addr1 ", " reg2 is op=7 & AluPrefix & mov_sub=3 & Addr1 & reg2 {
     reg2 = Addr1;
 }
-:^AluPrefix^"mov " Addr1_e ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=4 & Addr1_e & reg2 {
+:^AluPrefix^"mov " Addr1_e ", " reg2 is op=7 & AluPrefix & mov_sub=4 & Addr1_e & reg2 {
     reg2 = Addr1_e;
 }
-:^AluPrefix^"mov " Addr0_o ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=5 & Addr0_o & reg2 {
+:^AluPrefix^"mov " Addr0_o ", " reg2 is op=7 & AluPrefix & mov_sub=5 & Addr0_o & reg2 {
     reg2 = Addr0_o;
 }
-:^AluPrefix^"mov " reg1 ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=6 & reg1 & reg2 {
+:^AluPrefix^"mov " reg1 ", " reg2 is op=7 & AluPrefix & mov_sub=6 & reg1 & reg2 {
     reg2 = reg1;
 }
 
 # NOP (special case of mov a, - which is parsed as alu update with no transfer)
-# In MAME: if(alu) and (opcode & 0x001fffff) == 0x1f1e10 is 'mov a, -' used as nop
-:^AluPrefix^"mov a, -" is op=7 & AluPrefix & op18=7 & mov_sub=6 & reg1=16 & reg2=15 {}
+:^AluPrefix^"mov a, -" is op=7 & AluPrefix & mov_sub=6 & reg1=16 & reg2=15 {}
 
 # stmh instruction
 :stmh is op=0x0d & br_sub=5 {
