@@ -1,0 +1,1286 @@
+# Sleigh specification for NEC V60 CPU
+
+define endian=little;
+define alignment=1;
+
+define space ram type=ram_space size=4 default;
+define space register type=register_space size=4;
+
+# Register definitions
+define register offset=0 size=4 [
+	R0  R1  R2  R3  R4  R5  R6  R7
+	R8  R9  R10 R11 R12 R13 R14 R15
+	R16 R17 R18 R19 R20 R21 R22 R23
+	R24 R25 R26 R27 R28 AP  FP  SP
+	PC  PSW
+];
+
+define register offset=0 size=1 [
+	R0b  _ _ _ R1b  _ _ _ R2b  _ _ _ R3b  _ _ _
+	R4b  _ _ _ R5b  _ _ _ R6b  _ _ _ R7b  _ _ _
+	R8b  _ _ _ R9b  _ _ _ R10b _ _ _ R11b _ _ _
+	R12b _ _ _ R13b _ _ _ R14b _ _ _ R15b _ _ _
+	R16b _ _ _ R17b _ _ _ R18b _ _ _ R19b _ _ _
+	R20b _ _ _ R21b _ _ _ R22b _ _ _ R23b _ _ _
+	R24b _ _ _ R25b _ _ _ R26b _ _ _ R27b _ _ _
+	R28b _ _ _ APb  _ _ _ FPb  _ _ _ SPb
+];
+
+define register offset=0 size=2 [
+	R0h  _ R1h  _ R2h  _ R3h  _
+	R4h  _ R5h  _ R6h  _ R7h  _
+	R8h  _ R9h  _ R10h _ R11h _
+	R12h _ R13h _ R14h _ R15h _
+	R16h _ R17h _ R18h _ R19h _
+	R20h _ R21h _ R22h _ R23h _
+	R24h _ R25h _ R26h _ R27h _
+	R28h _ APh  _ FPh  _ SPh
+];
+
+define register offset=256 size=4 [
+    ISP L0SP L1SP L2SP L3SP SBR TR SYCW TKCW PIR PSW2
+    ATBR0 ATLR0 ATBR1 ATLR1 ATBR2 ATLR2 ATBR3 ATLR3
+    TRMODE ADTR0 ADTR1 ADTMR0 ADTMR1
+];
+
+# Tokens
+define token opToken (8)
+    op = (0, 7)
+;
+
+define token modCodeToken (8)
+    f_type  = (7, 7)
+    m1_flag = (6, 6)
+    m2_flag = (5, 5)
+    f_reg   = (0, 4)
+    f_reg_b = (0, 4)
+    f_reg_h = (0, 4)
+;
+
+define token modToken (8)
+    mod_mode     = (5, 7)
+    mod_reg      = (0, 4)
+    mod_reg_b    = (0, 4)
+    mod_reg_h    = (0, 4)
+    mod_reg_bit4 = (4, 4)
+    mod_reg_low4 = (0, 3)
+;
+
+define token mod2Token (8)
+    mod2_mode     = (5, 7)
+    mod2_reg      = (0, 4)
+    mod2_reg_b    = (0, 4)
+    mod2_reg_h    = (0, 4)
+    mod2_reg_bit4 = (4, 4)
+    mod2_reg_low4 = (0, 3)
+;
+
+define token f7FlagsToken (8)
+    f7_m1 = (6, 6)
+    f7_m2 = (5, 5)
+    f7_sub = (0, 4)
+;
+
+define token f7OpToken (8)
+    f7_op_reg_flag = (7, 7)
+    f7_op_reg      = (0, 4)
+    f7_op_imm      = (0, 7)
+;
+
+define token valToken8 (8)
+    val8 = (0, 7)
+    val8s = (0, 7) signed
+;
+define token valToken8_1 (8)
+    val8_1 = (0, 7)
+    val8s_1 = (0, 7) signed
+;
+
+define token valToken16 (16)
+    val16 = (0, 15)
+    val16s = (0, 15) signed
+;
+define token valToken16_1 (16)
+    val16_1 = (0, 15)
+    val16s_1 = (0, 15) signed
+;
+
+define token valToken32 (32)
+    val32 = (0, 31)
+    val32s = (0, 31) signed
+;
+define token valToken32_1 (32)
+    val32_1 = (0, 31)
+    val32s_1 = (0, 31) signed
+;
+
+define token relToken8 (8)
+    rel8 = (0, 7) signed
+;
+define token relToken16 (16)
+    rel16 = (0, 15) signed
+;
+
+# Attach register variables
+attach variables [ f_reg mod_reg mod2_reg f7_op_reg ] [
+	R0  R1  R2  R3  R4  R5  R6  R7
+	R8  R9  R10 R11 R12 R13 R14 R15
+	R16 R17 R18 R19 R20 R21 R22 R23
+	R24 R25 R26 R27 R28 AP  FP  SP
+];
+
+attach variables [ f_reg_b mod_reg_b mod2_reg_b ] [
+	R0b  R1b  R2b  R3b  R4b  R5b  R6b  R7b
+	R8b  R9b  R10b R11b R12b R13b R14b R15b
+	R16b R17b R18b R19b R20b R21b R22b R23b
+	R24b R25b R26b R27b R28b APb  FPb  SPb
+];
+
+attach variables [ f_reg_h mod_reg_h mod2_reg_h ] [
+	R0h  R1h  R2h  R3h  R4h  R5h  R6h  R7h
+	R8h  R9h  R10h R11h R12h R13h R14h R15h
+	R16h R17h R18h R19h R20h R21h R22h R23h
+	R24h R25h R26h R27h R28h APh  FPh  SPh
+];
+
+# Branch target address mapping
+br_target8: target is rel8 [ target = inst_start + rel8; ] { export *[ram]:4 target; }
+br_target16: target is rel16 [ target = inst_start + rel16; ] { export *[ram]:4 target; }
+
+f7_op: f7_op_reg is f7_op_reg_flag=1 & f7_op_reg { export f7_op_reg; }
+f7_op: #f7_op_imm is f7_op_reg_flag=0 & f7_op_imm { local tmp:4 = f7_op_imm; export tmp; }
+
+f7_op2: f7_op_reg is f7_op_reg_flag=1 & f7_op_reg { export f7_op_reg; }
+f7_op2: #f7_op_imm is f7_op_reg_flag=0 & f7_op_imm { local tmp:4 = f7_op_imm; export tmp; }
+
+# =====================================================================
+# Addressing Modes - m = 0
+# =====================================================================
+
+op_m0: mod_reg is mod_mode=0 & mod_reg; val8s {
+    local tmp:4 = mod_reg + sext(val8s:1);
+    export tmp;
+}
+op_m0: mod_reg is mod_mode=1 & mod_reg; val16s {
+    local tmp:4 = mod_reg + sext(val16s:2);
+    export tmp;
+}
+op_m0: mod_reg is mod_mode=2 & mod_reg; val32s {
+    local tmp:4 = mod_reg + val32s;
+    export tmp;
+}
+op_m0: [mod_reg] is mod_mode=3 & mod_reg {
+    local tmp:4 = mod_reg;
+    export tmp;
+}
+op_m0: [mod_reg] is mod_mode=4 & mod_reg; val8s {
+    local ptr:4 = mod_reg + sext(val8s:1);
+    export ptr;
+}
+op_m0: [mod_reg] is mod_mode=5 & mod_reg; val16s {
+    local ptr:4 = mod_reg + sext(val16s:2);
+    export ptr;
+}
+op_m0: [mod_reg] is mod_mode=6 & mod_reg; val32s {
+    local ptr:4 = mod_reg + val32s;
+    export ptr;
+}
+op_m0: val8s["PC"] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=0; val8s {
+    local tmp:4 = inst_start + sext(val8s:1);
+    export tmp;
+}
+op_m0: val16s["PC"] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=1; val16s {
+    local tmp:4 = inst_start + sext(val16s:2);
+    export tmp;
+}
+op_m0: val32s["PC"] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=2; val32s {
+    local tmp:4 = inst_start + val32s;
+    export tmp;
+}
+op_m0: val32 is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=3; val32 {
+    local tmp:4 = val32;
+    export tmp;
+}
+op_m0: [val8s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=8; val8s {
+    local ptr:4 = inst_start + sext(val8s:1);
+    local tmp:4 = *:4 ptr;
+    export tmp;
+}
+op_m0: [val16s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=9; val16s {
+    local ptr:4 = inst_start + sext(val16s:2);
+    local tmp:4 = *:4 ptr;
+    export tmp;
+}
+op_m0: [val32s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=10; val32s {
+    local ptr:4 = inst_start + val32s;
+    local tmp:4 = *:4 ptr;
+    export tmp;
+}
+op_m0: [val32] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=11; val32 {
+    local ptr:4 = *:4 val32:4;
+    export ptr;
+}
+op_m0: val8s_1[val8s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=12; val8s; val8s_1 {
+    local ptr:4 = inst_start + sext(val8s:1);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + sext(val8s_1:1);
+    export tmp;
+}
+op_m0: val16s_1[val16s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=13; val16s; val16s_1 {
+    local ptr:4 = inst_start + sext(val16s:2);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + sext(val16s_1:2);
+    export tmp;
+}
+op_m0: val32s_1[val32s["PC"]] is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=14; val32s; val32s_1 {
+    local ptr:4 = inst_start + val32s;
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + val32s_1;
+    export tmp;
+}
+
+# =====================================================================
+# Addressing Modes - m = 1
+# =====================================================================
+
+op_m1: val8s_1[val8s[mod_reg]] is mod_mode=0 & mod_reg; val8s; val8s_1 {
+    local ptr:4 = mod_reg + sext(val8s:1);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + sext(val8s_1:1);
+    export tmp;
+}
+op_m1: val16s_1[val16s[mod_reg]] is mod_mode=1 & mod_reg; val16s; val16s_1 {
+    local ptr:4 = mod_reg + sext(val16s:2);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + sext(val16s_1:2);
+    export tmp;
+}
+op_m1: val32s_1[val32s[mod_reg]] is mod_mode=2 & mod_reg; val32s; val32s_1 {
+    local ptr:4 = mod_reg + val32s;
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + val32s_1;
+    export tmp;
+}
+op_m1: val8s[mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=0 & mod2_reg; val8s {
+    local tmp:4 = mod2_reg + sext(val8s:1) + mod_reg;
+    export tmp;
+}
+op_m1: val16s[mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=1 & mod2_reg; val16s {
+    local tmp:4 = mod2_reg + sext(val16s:2) + mod_reg;
+    export tmp;
+}
+op_m1: val32s[mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=2 & mod2_reg; val32s {
+    local tmp:4 = mod2_reg + val32s + mod_reg;
+    export tmp;
+}
+op_m1: [mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=3 & mod2_reg {
+    local tmp:4 = mod2_reg + mod_reg;
+    export tmp;
+}
+op_m1: [mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=4 & mod2_reg; val8s {
+    local ptr:4 = mod2_reg + sext(val8s:1);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: [mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=5 & mod2_reg; val16s {
+    local ptr:4 = mod2_reg + sext(val16s:2);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: [mod2_reg](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=6 & mod2_reg; val32s {
+    local ptr:4 = mod2_reg + val32s;
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: val8s["PC"](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=0; val8s {
+    local tmp:4 = inst_start + sext(val8s:1) + mod_reg;
+    export tmp;
+}
+op_m1: val16s["PC"](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=1; val16s {
+    local tmp:4 = inst_start + sext(val16s:2) + mod_reg;
+    export tmp;
+}
+op_m1: val32s["PC"](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=2; val32s {
+    local tmp:4 = inst_start + val32s + mod_reg;
+    export tmp;
+}
+op_m1: val32(mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=3; val32 {
+    local tmp:4 = val32 + mod_reg;
+    export tmp;
+}
+op_m1: [val8s["PC"]](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=8; val8s {
+    local ptr:4 = inst_start + sext(val8s:1);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: [val16s["PC"]](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=9; val16s {
+    local ptr:4 = inst_start + sext(val16s:2);
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: [val32s["PC"]](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=10; val32s {
+    local ptr:4 = inst_start + val32s;
+    local base:4 = *:4 ptr;
+    local tmp:4 = base + mod_reg;
+    export tmp;
+}
+op_m1: [val32](mod_reg) is mod_mode=6 & mod_reg; mod2_mode=7 & mod2_reg_bit4=1 & mod2_reg_low4=11; val32 {
+    local ptr:4 = *:4 val32:4;
+    local tmp:4 = ptr + mod_reg;
+    export tmp;
+}
+
+# =====================================================================
+# Size specific submode overrides (M0)
+# =====================================================================
+
+op_m0_b: op_m0 is op_m0 { export *:1 op_m0; }
+op_m0_b: #mod_reg_low4 is mod_mode=7 & mod_reg_bit4=0 & mod_reg_low4 {
+    local tmp:1 = mod_reg_low4;
+    export tmp;
+}
+op_m0_b: #val8 is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=4; val8 {
+    local tmp:1 = val8;
+    export tmp;
+}
+
+op_m0_h: op_m0 is op_m0 { export *:2 op_m0; }
+op_m0_h: #mod_reg_low4 is mod_mode=7 & mod_reg_bit4=0 & mod_reg_low4 {
+    local tmp:2 = mod_reg_low4;
+    export tmp;
+}
+op_m0_h: #val16 is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=4; val16 {
+    local tmp:2 = val16;
+    export tmp;
+}
+
+op_m0_w: op_m0 is op_m0 { export *:4 op_m0; }
+op_m0_w: #mod_reg_low4 is mod_mode=7 & mod_reg_bit4=0 & mod_reg_low4 {
+    local tmp:4 = mod_reg_low4;
+    export tmp;
+}
+op_m0_w: #val32 is mod_mode=7 & mod_reg_bit4=1 & mod_reg_low4=4; val32 {
+    local tmp:4 = val32;
+    export tmp;
+}
+
+# =====================================================================
+# Size specific submode overrides (M1)
+# =====================================================================
+
+op_m1_b: op_m1 is op_m1 { export *:1 op_m1; }
+op_m1_b: mod_reg_b is mod_mode=3 & mod_reg_b { export mod_reg_b; }
+op_m1_b: [mod_reg+] is mod_mode=4 & mod_reg {
+    local tmp:4 = mod_reg;
+    mod_reg = mod_reg + 1;
+    export *:1 tmp;
+}
+op_m1_b: [-mod_reg] is mod_mode=5 & mod_reg {
+    mod_reg = mod_reg - 1;
+    local tmp:4 = mod_reg;
+    export *:1 tmp;
+}
+
+op_m1_h: op_m1 is op_m1 { export *:2 op_m1; }
+op_m1_h: mod_reg_h is mod_mode=3 & mod_reg_h { export mod_reg_h; }
+op_m1_h: [mod_reg+] is mod_mode=4 & mod_reg {
+    local tmp:4 = mod_reg;
+    mod_reg = mod_reg + 2;
+    export *:2 tmp;
+}
+op_m1_h: [-mod_reg] is mod_mode=5 & mod_reg {
+    mod_reg = mod_reg - 2;
+    local tmp:4 = mod_reg;
+    export *:2 tmp;
+}
+
+op_m1_w: op_m1 is op_m1 { export *:4 op_m1; }
+op_m1_w: mod_reg is mod_mode=3 & mod_reg { export mod_reg; }
+op_m1_w: [mod_reg+] is mod_mode=4 & mod_reg {
+    local tmp:4 = mod_reg;
+    mod_reg = mod_reg + 4;
+    export *:4 tmp;
+}
+op_m1_w: [-mod_reg] is mod_mode=5 & mod_reg {
+    mod_reg = mod_reg - 4;
+    local tmp:4 = mod_reg;
+    export *:4 tmp;
+}
+
+# =====================================================================
+# Operand Dispatchers based on mod_code flags
+# =====================================================================
+
+# =====================================================================
+# Operand Wrapper Tables for the second operand in F2 format
+# =====================================================================
+
+op2_m0_b: op_m0_b is op_m0_b { export op_m0_b; }
+op2_m1_b: op_m1_b is op_m1_b { export op_m1_b; }
+
+op2_m0_h: op_m0_h is op_m0_h { export op_m0_h; }
+op2_m1_h: op_m1_h is op_m1_h { export op_m1_h; }
+
+op2_m0_w: op_m0_w is op_m0_w { export op_m0_w; }
+op2_m1_w: op_m1_w is op_m1_w { export op_m1_w; }
+
+# =====================================================================
+# Instructions Definitions
+# =====================================================================
+
+# --- MOV.b ---
+# F1 format: Reg/AM
+:MOV.b op_m0_b, f_reg_b is op=0x09; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b; }
+:MOV.b op_m1_b, f_reg_b is op=0x09; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b; }
+:MOV.b f_reg_b, op_m0_b is op=0x09; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = f_reg_b; }
+:MOV.b f_reg_b, op_m1_b is op=0x09; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = f_reg_b; }
+# F2 format: AM/AM
+:MOV.b op_m0_b, op2_m0_b is op=0x09; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b; }
+:MOV.b op_m0_b, op2_m1_b is op=0x09; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b; }
+:MOV.b op_m1_b, op2_m0_b is op=0x09; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b; }
+:MOV.b op_m1_b, op2_m1_b is op=0x09; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b; }
+
+# --- MOV.h ---
+# F1 format
+:MOV.h op_m0_h, f_reg_h is op=0x1b; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h; }
+:MOV.h op_m1_h, f_reg_h is op=0x1b; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h; }
+:MOV.h f_reg_h, op_m0_h is op=0x1b; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = f_reg_h; }
+:MOV.h f_reg_h, op_m1_h is op=0x1b; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = f_reg_h; }
+# F2 format
+:MOV.h op_m0_h, op2_m0_h is op=0x1b; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h; }
+:MOV.h op_m0_h, op2_m1_h is op=0x1b; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h; }
+:MOV.h op_m1_h, op2_m0_h is op=0x1b; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h; }
+:MOV.h op_m1_h, op2_m1_h is op=0x1b; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h; }
+
+# --- MOV.w ---
+# F1 format
+:MOV.w op_m0_w, f_reg is op=0x2d; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w; }
+:MOV.w op_m1_w, f_reg is op=0x2d; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w; }
+:MOV.w f_reg, op_m0_w is op=0x2d; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = f_reg; }
+:MOV.w f_reg, op_m1_w is op=0x2d; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = f_reg; }
+# F2 format
+:MOV.w op_m0_w, op2_m0_w is op=0x2d; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w; }
+:MOV.w op_m0_w, op2_m1_w is op=0x2d; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w; }
+:MOV.w op_m1_w, op2_m0_w is op=0x2d; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w; }
+:MOV.w op_m1_w, op2_m1_w is op=0x2d; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w; }
+
+# --- MOV.d ---
+# F1 format
+:MOV.d op_m0_w, f_reg is op=0x3f; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w; }
+:MOV.d op_m1_w, f_reg is op=0x3f; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w; }
+:MOV.d f_reg, op_m0_w is op=0x3f; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = f_reg; }
+:MOV.d f_reg, op_m1_w is op=0x3f; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = f_reg; }
+# F2 format
+:MOV.d op_m0_w, op2_m0_w is op=0x3f; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w; }
+:MOV.d op_m0_w, op2_m1_w is op=0x3f; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w; }
+:MOV.d op_m1_w, op2_m0_w is op=0x3f; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w; }
+:MOV.d op_m1_w, op2_m1_w is op=0x3f; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w; }
+
+# --- ADD.b ---
+# F1 format
+:ADD.b op_m0_b, f_reg_b is op=0x80; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b + f_reg_b; }
+:ADD.b op_m1_b, f_reg_b is op=0x80; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b + f_reg_b; }
+:ADD.b f_reg_b, op_m0_b is op=0x80; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = op_m0_b + f_reg_b; }
+:ADD.b f_reg_b, op_m1_b is op=0x80; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = op_m1_b + f_reg_b; }
+# F2 format
+:ADD.b op_m0_b, op2_m0_b is op=0x80; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b + op2_m0_b; }
+:ADD.b op_m0_b, op2_m1_b is op=0x80; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b + op2_m1_b; }
+:ADD.b op_m1_b, op2_m0_b is op=0x80; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b + op2_m0_b; }
+:ADD.b op_m1_b, op2_m1_b is op=0x80; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b + op2_m1_b; }
+
+# --- ADD.h ---
+# F1 format
+:ADD.h op_m0_h, f_reg_h is op=0x82; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h + f_reg_h; }
+:ADD.h op_m1_h, f_reg_h is op=0x82; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h + f_reg_h; }
+:ADD.h f_reg_h, op_m0_h is op=0x82; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = op_m0_h + f_reg_h; }
+:ADD.h f_reg_h, op_m1_h is op=0x82; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = op_m1_h + f_reg_h; }
+# F2 format
+:ADD.h op_m0_h, op2_m0_h is op=0x82; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h + op2_m0_h; }
+:ADD.h op_m0_h, op2_m1_h is op=0x82; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h + op2_m1_h; }
+:ADD.h op_m1_h, op2_m0_h is op=0x82; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h + op2_m0_h; }
+:ADD.h op_m1_h, op2_m1_h is op=0x82; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h + op2_m1_h; }
+
+# --- ADD.w ---
+# F1 format
+:ADD.w op_m0_w, f_reg is op=0x84; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w + f_reg; }
+:ADD.w op_m1_w, f_reg is op=0x84; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w + f_reg; }
+:ADD.w f_reg, op_m0_w is op=0x84; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w + f_reg; }
+:ADD.w f_reg, op_m1_w is op=0x84; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w + f_reg; }
+# F2 format
+:ADD.w op_m0_w, op2_m0_w is op=0x84; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w + op2_m0_w; }
+:ADD.w op_m0_w, op2_m1_w is op=0x84; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w + op2_m1_w; }
+:ADD.w op_m1_w, op2_m0_w is op=0x84; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w + op2_m0_w; }
+:ADD.w op_m1_w, op2_m1_w is op=0x84; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w + op2_m1_w; }
+
+# --- SUB.b ---
+# F1 format
+:SUB.b op_m0_b, f_reg_b is op=0xa8; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = f_reg_b - op_m0_b; }
+:SUB.b op_m1_b, f_reg_b is op=0xa8; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = f_reg_b - op_m1_b; }
+:SUB.b f_reg_b, op_m0_b is op=0xa8; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = op_m0_b - f_reg_b; }
+:SUB.b f_reg_b, op_m1_b is op=0xa8; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = op_m1_b - f_reg_b; }
+# F2 format
+:SUB.b op_m0_b, op2_m0_b is op=0xa8; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op2_m0_b - op_m0_b; }
+:SUB.b op_m0_b, op2_m1_b is op=0xa8; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op2_m1_b - op_m0_b; }
+:SUB.b op_m1_b, op2_m0_b is op=0xa8; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op2_m0_b - op_m1_b; }
+:SUB.b op_m1_b, op2_m1_b is op=0xa8; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op2_m1_b - op_m1_b; }
+
+# --- SUB.h ---
+# F1 format
+:SUB.h op_m0_h, f_reg_h is op=0xaa; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = f_reg_h - op_m0_h; }
+:SUB.h op_m1_h, f_reg_h is op=0xaa; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = f_reg_h - op_m1_h; }
+:SUB.h f_reg_h, op_m0_h is op=0xaa; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = op_m0_h - f_reg_h; }
+:SUB.h f_reg_h, op_m1_h is op=0xaa; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = op_m1_h - f_reg_h; }
+# F2 format
+:SUB.h op_m0_h, op2_m0_h is op=0xaa; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op2_m0_h - op_m0_h; }
+:SUB.h op_m0_h, op2_m1_h is op=0xaa; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op2_m1_h - op_m0_h; }
+:SUB.h op_m1_h, op2_m0_h is op=0xaa; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op2_m0_h - op_m1_h; }
+:SUB.h op_m1_h, op2_m1_h is op=0xaa; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op2_m1_h - op_m1_h; }
+
+# --- SUB.w ---
+# F1 format
+:SUB.w op_m0_w, f_reg is op=0xac; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = f_reg - op_m0_w; }
+:SUB.w op_m1_w, f_reg is op=0xac; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = f_reg - op_m1_w; }
+:SUB.w f_reg, op_m0_w is op=0xac; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w - f_reg; }
+:SUB.w f_reg, op_m1_w is op=0xac; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w - f_reg; }
+# F2 format
+:SUB.w op_m0_w, op2_m0_w is op=0xac; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op2_m0_w - op_m0_w; }
+:SUB.w op_m0_w, op2_m1_w is op=0xac; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op2_m1_w - op_m0_w; }
+:SUB.w op_m1_w, op2_m0_w is op=0xac; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op2_m0_w - op_m1_w; }
+:SUB.w op_m1_w, op2_m1_w is op=0xac; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op2_m1_w - op_m1_w; }
+
+# --- CMP.b ---
+# F1 format
+:CMP.b op_m0_b, f_reg_b is op=0xb8; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { local tmp:1 = op_m0_b - f_reg_b; }
+:CMP.b op_m1_b, f_reg_b is op=0xb8; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { local tmp:1 = op_m1_b - f_reg_b; }
+:CMP.b f_reg_b, op_m0_b is op=0xb8; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { local tmp:1 = f_reg_b - op_m0_b; }
+:CMP.b f_reg_b, op_m1_b is op=0xb8; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { local tmp:1 = f_reg_b - op_m1_b; }
+# F2 format
+:CMP.b op_m0_b, op2_m0_b is op=0xb8; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { local tmp:1 = op_m0_b - op2_m0_b; }
+:CMP.b op_m0_b, op2_m1_b is op=0xb8; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { local tmp:1 = op_m0_b - op2_m1_b; }
+:CMP.b op_m1_b, op2_m0_b is op=0xb8; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { local tmp:1 = op_m1_b - op2_m0_b; }
+:CMP.b op_m1_b, op2_m1_b is op=0xb8; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { local tmp:1 = op_m1_b - op2_m1_b; }
+
+# --- CMP.h ---
+# F1 format
+:CMP.h op_m0_h, f_reg_h is op=0xba; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { local tmp:2 = op_m0_h - f_reg_h; }
+:CMP.h op_m1_h, f_reg_h is op=0xba; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { local tmp:2 = op_m1_h - f_reg_h; }
+:CMP.h f_reg_h, op_m0_h is op=0xba; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { local tmp:2 = f_reg_h - op_m0_h; }
+:CMP.h f_reg_h, op_m1_h is op=0xba; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { local tmp:2 = f_reg_h - op_m1_h; }
+# F2 format
+:CMP.h op_m0_h, op2_m0_h is op=0xba; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { local tmp:2 = op_m0_h - op2_m0_h; }
+:CMP.h op_m0_h, op2_m1_h is op=0xba; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { local tmp:2 = op_m0_h - op2_m1_h; }
+:CMP.h op_m1_h, op2_m0_h is op=0xba; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { local tmp:2 = op_m1_h - op2_m0_h; }
+:CMP.h op_m1_h, op2_m1_h is op=0xba; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { local tmp:2 = op_m1_h - op2_m1_h; }
+
+# --- CMP.w ---
+# F1 format
+:CMP.w op_m0_w, f_reg is op=0xbc; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { local tmp:4 = op_m0_w - f_reg; }
+:CMP.w op_m1_w, f_reg is op=0xbc; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { local tmp:4 = op_m1_w - f_reg; }
+:CMP.w f_reg, op_m0_w is op=0xbc; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { local tmp:4 = f_reg - op_m0_w; }
+:CMP.w f_reg, op_m1_w is op=0xbc; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { local tmp:4 = f_reg - op_m1_w; }
+# F2 format
+:CMP.w op_m0_w, op2_m0_w is op=0xbc; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { local tmp:4 = op_m0_w - op2_m0_w; }
+:CMP.w op_m0_w, op2_m1_w is op=0xbc; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { local tmp:4 = op_m0_w - op2_m1_w; }
+:CMP.w op_m1_w, op2_m0_w is op=0xbc; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { local tmp:4 = op_m1_w - op2_m0_w; }
+:CMP.w op_m1_w, op2_m1_w is op=0xbc; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { local tmp:4 = op_m1_w - op2_m1_w; }
+
+# --- AND.b ---
+# F1 format
+:AND.b op_m0_b, f_reg_b is op=0xa0; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b & f_reg_b; }
+:AND.b op_m1_b, f_reg_b is op=0xa0; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b & f_reg_b; }
+:AND.b f_reg_b, op_m0_b is op=0xa0; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = op_m0_b & f_reg_b; }
+:AND.b f_reg_b, op_m1_b is op=0xa0; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = op_m1_b & f_reg_b; }
+# F2 format
+:AND.b op_m0_b, op2_m0_b is op=0xa0; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b & op2_m0_b; }
+:AND.b op_m0_b, op2_m1_b is op=0xa0; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b & op2_m1_b; }
+:AND.b op_m1_b, op2_m0_b is op=0xa0; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b & op2_m0_b; }
+:AND.b op_m1_b, op2_m1_b is op=0xa0; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b & op2_m1_b; }
+
+# --- AND.h ---
+# F1 format
+:AND.h op_m0_h, f_reg_h is op=0xa2; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h & f_reg_h; }
+:AND.h op_m1_h, f_reg_h is op=0xa2; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h & f_reg_h; }
+:AND.h f_reg_h, op_m0_h is op=0xa2; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = op_m0_h & f_reg_h; }
+:AND.h f_reg_h, op_m1_h is op=0xa2; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = op_m1_h & f_reg_h; }
+# F2 format
+:AND.h op_m0_h, op2_m0_h is op=0xa2; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h & op2_m0_h; }
+:AND.h op_m0_h, op2_m1_h is op=0xa2; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h & op2_m1_h; }
+:AND.h op_m1_h, op2_m0_h is op=0xa2; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h & op2_m0_h; }
+:AND.h op_m1_h, op2_m1_h is op=0xa2; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h & op2_m1_h; }
+
+# --- AND.w ---
+# F1 format
+:AND.w op_m0_w, f_reg is op=0xa4; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w & f_reg; }
+:AND.w op_m1_w, f_reg is op=0xa4; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w & f_reg; }
+:AND.w f_reg, op_m0_w is op=0xa4; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w & f_reg; }
+:AND.w f_reg, op_m1_w is op=0xa4; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w & f_reg; }
+# F2 format
+:AND.w op_m0_w, op2_m0_w is op=0xa4; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w & op2_m0_w; }
+:AND.w op_m0_w, op2_m1_w is op=0xa4; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w & op2_m1_w; }
+:AND.w op_m1_w, op2_m0_w is op=0xa4; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w & op2_m0_w; }
+:AND.w op_m1_w, op2_m1_w is op=0xa4; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w & op2_m1_w; }
+
+# --- OR.b ---
+# F1 format
+:OR.b op_m0_b, f_reg_b is op=0x88; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b | f_reg_b; }
+:OR.b op_m1_b, f_reg_b is op=0x88; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b | f_reg_b; }
+:OR.b f_reg_b, op_m0_b is op=0x88; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = op_m0_b | f_reg_b; }
+:OR.b f_reg_b, op_m1_b is op=0x88; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = op_m1_b | f_reg_b; }
+# F2 format
+:OR.b op_m0_b, op2_m0_b is op=0x88; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b | op2_m0_b; }
+:OR.b op_m0_b, op2_m1_b is op=0x88; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b | op2_m1_b; }
+:OR.b op_m1_b, op2_m0_b is op=0x88; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b | op2_m0_b; }
+:OR.b op_m1_b, op2_m1_b is op=0x88; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b | op2_m1_b; }
+
+# --- OR.h ---
+# F1 format
+:OR.h op_m0_h, f_reg_h is op=0x8a; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h | f_reg_h; }
+:OR.h op_m1_h, f_reg_h is op=0x8a; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h | f_reg_h; }
+:OR.h f_reg_h, op_m0_h is op=0x8a; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = op_m0_h | f_reg_h; }
+:OR.h f_reg_h, op_m1_h is op=0x8a; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = op_m1_h | f_reg_h; }
+# F2 format
+:OR.h op_m0_h, op2_m0_h is op=0x8a; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h | op2_m0_h; }
+:OR.h op_m0_h, op2_m1_h is op=0x8a; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h | op2_m1_h; }
+:OR.h op_m1_h, op2_m0_h is op=0x8a; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h | op2_m0_h; }
+:OR.h op_m1_h, op2_m1_h is op=0x8a; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h | op2_m1_h; }
+
+# --- OR.w ---
+# F1 format
+:OR.w op_m0_w, f_reg is op=0x8c; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w | f_reg; }
+:OR.w op_m1_w, f_reg is op=0x8c; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w | f_reg; }
+:OR.w f_reg, op_m0_w is op=0x8c; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w | f_reg; }
+:OR.w f_reg, op_m1_w is op=0x8c; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w | f_reg; }
+# F2 format
+:OR.w op_m0_w, op2_m0_w is op=0x8c; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w | op2_m0_w; }
+:OR.w op_m0_w, op2_m1_w is op=0x8c; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w | op2_m1_w; }
+:OR.w op_m1_w, op2_m0_w is op=0x8c; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w | op2_m0_w; }
+:OR.w op_m1_w, op2_m1_w is op=0x8c; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w | op2_m1_w; }
+
+# --- XOR.b ---
+# F1 format
+:XOR.b op_m0_b, f_reg_b is op=0xb0; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b ^ f_reg_b; }
+:XOR.b op_m1_b, f_reg_b is op=0xb0; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b ^ f_reg_b; }
+:XOR.b f_reg_b, op_m0_b is op=0xb0; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = op_m0_b ^ f_reg_b; }
+:XOR.b f_reg_b, op_m1_b is op=0xb0; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = op_m1_b ^ f_reg_b; }
+# F2 format
+:XOR.b op_m0_b, op2_m0_b is op=0xb0; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b ^ op2_m0_b; }
+:XOR.b op_m0_b, op2_m1_b is op=0xb0; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b ^ op2_m1_b; }
+:XOR.b op_m1_b, op2_m0_b is op=0xb0; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b ^ op2_m0_b; }
+:XOR.b op_m1_b, op2_m1_b is op=0xb0; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b ^ op2_m1_b; }
+
+# --- XOR.h ---
+# F1 format
+:XOR.h op_m0_h, f_reg_h is op=0xb2; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h ^ f_reg_h; }
+:XOR.h op_m1_h, f_reg_h is op=0xb2; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h ^ f_reg_h; }
+:XOR.h f_reg_h, op_m0_h is op=0xb2; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = op_m0_h ^ f_reg_h; }
+:XOR.h f_reg_h, op_m1_h is op=0xb2; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = op_m1_h ^ f_reg_h; }
+# F2 format
+:XOR.h op_m0_h, op2_m0_h is op=0xb2; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h ^ op2_m0_h; }
+:XOR.h op_m0_h, op2_m1_h is op=0xb2; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h ^ op2_m1_h; }
+:XOR.h op_m1_h, op2_m0_h is op=0xb2; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h ^ op2_m0_h; }
+:XOR.h op_m1_h, op2_m1_h is op=0xb2; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h ^ op2_m1_h; }
+
+# --- XOR.w ---
+# F1 format
+:XOR.w op_m0_w, f_reg is op=0xb4; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w ^ f_reg; }
+:XOR.w op_m1_w, f_reg is op=0xb4; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w ^ f_reg; }
+:XOR.w f_reg, op_m0_w is op=0xb4; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w ^ f_reg; }
+:XOR.w f_reg, op_m1_w is op=0xb4; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w ^ f_reg; }
+# F2 format
+:XOR.w op_m0_w, op2_m0_w is op=0xb4; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w ^ op2_m0_w; }
+:XOR.w op_m0_w, op2_m1_w is op=0xb4; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w ^ op2_m1_w; }
+:XOR.w op_m1_w, op2_m0_w is op=0xb4; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w ^ op2_m0_w; }
+:XOR.w op_m1_w, op2_m1_w is op=0xb4; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w ^ op2_m1_w; }
+
+# --- INC ---
+:INC.b  op_m0_b       is op=0xd8; op_m0_b { op_m0_b = op_m0_b + 1; }
+:INC.b  op_m1_b       is op=0xd9; op_m1_b { op_m1_b = op_m1_b + 1; }
+:INC.h  op_m0_h       is op=0xda; op_m0_h { op_m0_h = op_m0_h + 1; }
+:INC.h  op_m1_h       is op=0xdb; op_m1_h { op_m1_h = op_m1_h + 1; }
+:INC.w  op_m0_w       is op=0xdc; op_m0_w { op_m0_w = op_m0_w + 1; }
+:INC.w  op_m1_w       is op=0xdd; op_m1_w { op_m1_w = op_m1_w + 1; }
+
+# --- DEC ---
+:DEC.b  op_m0_b       is op=0xd0; op_m0_b { op_m0_b = op_m0_b - 1; }
+:DEC.b  op_m1_b       is op=0xd1; op_m1_b { op_m1_b = op_m1_b - 1; }
+:DEC.h  op_m0_h       is op=0xd2; op_m0_h { op_m0_h = op_m0_h - 1; }
+:DEC.h  op_m1_h       is op=0xd3; op_m1_h { op_m1_h = op_m1_h - 1; }
+:DEC.w  op_m0_w       is op=0xd4; op_m0_w { op_m0_w = op_m0_w - 1; }
+:DEC.w  op_m1_w       is op=0xd5; op_m1_w { op_m1_w = op_m1_w - 1; }
+
+# --- PUSH / POP ---
+:PUSH   op_m0_w       is op=0xee; op_m0_w { SP = SP - 4; *:4 SP = op_m0_w; }
+:PUSH   op_m1_w       is op=0xef; op_m1_w { SP = SP - 4; *:4 SP = op_m1_w; }
+:POP    op_m0_w       is op=0xe6; op_m0_w { op_m0_w = *:4 SP; SP = SP + 4; }
+:POP    op_m1_w       is op=0xe7; op_m1_w { op_m1_w = *:4 SP; SP = SP + 4; }
+
+# --- CALL ---
+# F1 format
+:CALL op_m0_w, f_reg is op=0x49; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = f_reg;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call op_m0_w;
+}
+:CALL op_m1_w, f_reg is op=0x49; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = f_reg;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call op_m1_w;
+}
+:CALL f_reg, op_m0_w is op=0x49; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op_m0_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call [f_reg];
+}
+:CALL f_reg, op_m1_w is op=0x49; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op_m1_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call [f_reg];
+}
+# F2 format
+:CALL op_m0_w, op2_m0_w is op=0x49; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op2_m0_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call op_m0_w;
+}
+:CALL op_m0_w, op2_m1_w is op=0x49; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op2_m1_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call op_m0_w;
+}
+:CALL op_m1_w, op2_m0_w is op=0x49; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op2_m0_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call op_m1_w;
+}
+:CALL op_m1, op2_m1_w is op=0x49; f_type=1 & m1_flag=1 & m2_flag=1; op_m1; op2_m1_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    AP = op2_m1_w;
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call [op_m1];
+}
+:JMP    op_m0         is op=0xd6; op_m0 { goto [op_m0]; }
+:JMP    op_m1         is op=0xd7; op_m1 { goto [op_m1]; }
+:RET    op_m0_h       is op=0xe2; op_m0_h {
+    local target:4 = *:4 SP;
+    SP = SP + 4;
+    AP = *:4 SP;
+    SP = SP + 4;
+    SP = SP + zext(op_m0_h);
+    return [target];
+}
+:RET    op_m1_h       is op=0xe3; op_m1_h {
+    local target:4 = *:4 SP;
+    SP = SP + 4;
+    AP = *:4 SP;
+    SP = SP + 4;
+    SP = SP + zext(op_m1_h);
+    return [target];
+}
+:BSR    br_target16   is op=0x48; br_target16 {
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call br_target16;
+}
+:JSR    op_m0         is op=0xe8; op_m0 {
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call [op_m0];
+}
+:JSR    op_m1         is op=0xe9; op_m1 {
+    SP = SP - 4;
+    *:4 SP = inst_next;
+    call [op_m1];
+}
+
+# --- PREPARE / DISPOSE / NOP / HALT / RSR ---
+:PREPARE op_m0_w      is op=0xde; op_m0_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    FP = SP;
+    AP = FP + 8;
+    SP = SP - op_m0_w;
+}
+:PREPARE op_m1_w      is op=0xdf; op_m1_w {
+    SP = SP - 4;
+    *:4 SP = AP;
+    FP = SP;
+    AP = FP + 8;
+    SP = SP - op_m1_w;
+}
+:DISPOSE              is op=0xcc {
+    SP = FP;
+    FP = *:4 SP;
+    SP = SP + 4;
+}
+:NOP                  is op=0xcd {}
+:HALT                 is op=0x00 {}
+:RSR                  is op=0xca {
+    local target:4 = *:4 SP;
+    SP = SP + 4;
+    return [target];
+}
+
+# --- Conditional Branches (8-bit) ---
+:BV     br_target8    is op=0x60; br_target8 { if ((PSW & 0x01) != 0) goto br_target8; } # Overflow
+:BNV    br_target8    is op=0x61; br_target8 { if ((PSW & 0x01) == 0) goto br_target8; }
+:BL     br_target8    is op=0x62; br_target8 { if ((PSW & 0x08) != 0) goto br_target8; } # Carry/Less (Unsigned)
+:BNL    br_target8    is op=0x63; br_target8 { if ((PSW & 0x08) == 0) goto br_target8; }
+:BE     br_target8    is op=0x64; br_target8 { if ((PSW & 0x02) != 0) goto br_target8; } # Zero/Equal
+:BNE    br_target8    is op=0x65; br_target8 { if ((PSW & 0x02) == 0) goto br_target8; }
+:BNH    br_target8    is op=0x66; br_target8 { if ((PSW & 0x0a) != 0) goto br_target8; } # Z or CY
+:BH     br_target8    is op=0x67; br_target8 { if ((PSW & 0x0a) == 0) goto br_target8; }
+:BN     br_target8    is op=0x68; br_target8 { if ((PSW & 0x04) != 0) goto br_target8; } # Negative/Sign
+:BP     br_target8    is op=0x69; br_target8 { if ((PSW & 0x04) == 0) goto br_target8; }
+:BR     br_target8    is op=0x6a; br_target8 { goto br_target8; }
+:BLT    br_target8    is op=0x6c; br_target8 { if ((PSW & 0x10) != 0) goto br_target8; } # Signed Less Than
+:BGE    br_target8    is op=0x6d; br_target8 { if ((PSW & 0x10) == 0) goto br_target8; }
+:BLE    br_target8    is op=0x6e; br_target8 { if ((PSW & 0x12) != 0) goto br_target8; } # Z or Signed Less Than
+:BGT    br_target8    is op=0x6f; br_target8 { if ((PSW & 0x12) == 0) goto br_target8; }
+
+# --- Conditional Branches (16-bit) ---
+:BV     br_target16   is op=0x70; br_target16 { if ((PSW & 0x01) != 0) goto br_target16; }
+:BNV    br_target16   is op=0x71; br_target16 { if ((PSW & 0x01) == 0) goto br_target16; }
+:BL     br_target16   is op=0x72; br_target16 { if ((PSW & 0x08) != 0) goto br_target16; }
+:BNL    br_target16   is op=0x73; br_target16 { if ((PSW & 0x08) == 0) goto br_target16; }
+:BE     br_target16   is op=0x74; br_target16 { if ((PSW & 0x02) != 0) goto br_target16; }
+:BNE    br_target16   is op=0x75; br_target16 { if ((PSW & 0x02) == 0) goto br_target16; }
+:BNH    br_target16   is op=0x76; br_target16 { if ((PSW & 0x0a) != 0) goto br_target16; }
+:BH     br_target16   is op=0x77; br_target16 { if ((PSW & 0x0a) == 0) goto br_target16; }
+:BN     br_target16   is op=0x78; br_target16 { if ((PSW & 0x04) != 0) goto br_target16; }
+:BP     br_target16   is op=0x79; br_target16 { if ((PSW & 0x04) == 0) goto br_target16; }
+:BR     br_target16   is op=0x7a; br_target16 { goto br_target16; }
+:BLT    br_target16   is op=0x7c; br_target16 { if ((PSW & 0x10) != 0) goto br_target16; }
+:BGE    br_target16   is op=0x7d; br_target16 { if ((PSW & 0x10) == 0) goto br_target16; }
+:BLE    br_target16   is op=0x7e; br_target16 { if ((PSW & 0x12) != 0) goto br_target16; }
+:BGT    br_target16   is op=0x7f; br_target16 { if ((PSW & 0x12) == 0) goto br_target16; }
+
+# --- UPDPSW.w ---
+# F1 format
+:UPDPSW.w op_m0_w, f_reg is op=0x13; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w {
+    local mask:4 = f_reg & 0xFFFFFF;
+    local val:4 = op_m0_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w op_m1_w, f_reg is op=0x13; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w {
+    local mask:4 = f_reg & 0xFFFFFF;
+    local val:4 = op_m1_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w f_reg, op_m0_w is op=0x13; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w {
+    local mask:4 = op_m0_w & 0xFFFFFF;
+    local val:4 = f_reg & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w f_reg, op_m1_w is op=0x13; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w {
+    local mask:4 = op_m1_w & 0xFFFFFF;
+    local val:4 = f_reg & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+# F2 format
+:UPDPSW.w op_m0_w, op2_m0_w is op=0x13; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w {
+    local mask:4 = op2_m0_w & 0xFFFFFF;
+    local val:4 = op_m0_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w op_m0_w, op2_m1_w is op=0x13; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w {
+    local mask:4 = op2_m1_w & 0xFFFFFF;
+    local val:4 = op_m0_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w op_m1_w, op2_m0_w is op=0x13; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w {
+    local mask:4 = op2_m0_w & 0xFFFFFF;
+    local val:4 = op_m1_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.w op_m1_w, op2_m1_w is op=0x13; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w {
+    local mask:4 = op2_m1_w & 0xFFFFFF;
+    local val:4 = op_m1_w & 0xFFFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+
+# --- UPDPSW.h ---
+# F1 format
+:UPDPSW.h op_m0_w, f_reg is op=0x4a; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w {
+    local mask:4 = f_reg & 0xFFFF;
+    local val:4 = op_m0_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h op_m1_w, f_reg is op=0x4a; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w {
+    local mask:4 = f_reg & 0xFFFF;
+    local val:4 = op_m1_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h f_reg, op_m0_w is op=0x4a; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w {
+    local mask:4 = op_m0_w & 0xFFFF;
+    local val:4 = f_reg & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h f_reg, op_m1_w is op=0x4a; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w {
+    local mask:4 = op_m1_w & 0xFFFF;
+    local val:4 = f_reg & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+# F2 format
+:UPDPSW.h op_m0_w, op2_m0_w is op=0x4a; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w {
+    local mask:4 = op2_m0_w & 0xFFFF;
+    local val:4 = op_m0_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h op_m0_w, op2_m1_w is op=0x4a; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w {
+    local mask:4 = op2_m1_w & 0xFFFF;
+    local val:4 = op_m0_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h op_m1_w, op2_m0_w is op=0x4a; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w {
+    local mask:4 = op2_m0_w & 0xFFFF;
+    local val:4 = op_m1_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+:UPDPSW.h op_m1_w, op2_m1_w is op=0x4a; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w {
+    local mask:4 = op2_m1_w & 0xFFFF;
+    local val:4 = op_m1_w & 0xFFFF;
+    PSW = (PSW & (~mask)) | (val & mask);
+}
+
+# --- MOVZ.bh ---
+# F1 format
+:MOVZ.bh op_m0_b, f_reg_h is op=0x0B; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_b { f_reg_h = zext(op_m0_b); }
+:MOVZ.bh op_m1_b, f_reg_h is op=0x0B; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_b { f_reg_h = zext(op_m1_b); }
+:MOVZ.bh f_reg_b, op_m0_h is op=0x0B; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_h { op_m0_h = zext(f_reg_b); }
+:MOVZ.bh f_reg_b, op_m1_h is op=0x0B; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_h { op_m1_h = zext(f_reg_b); }
+# F2 format
+:MOVZ.bh op_m0_b, op2_m0_h is op=0x0B; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_h { op2_m0_h = zext(op_m0_b); }
+:MOVZ.bh op_m0_b, op2_m1_h is op=0x0B; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_h { op2_m1_h = zext(op_m0_b); }
+:MOVZ.bh op_m1_b, op2_m0_h is op=0x0B; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_h { op2_m0_h = zext(op_m1_b); }
+:MOVZ.bh op_m1_b, op2_m1_h is op=0x0B; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_h { op2_m1_h = zext(op_m1_b); }
+
+# --- MOVZ.bw ---
+# F1 format
+:MOVZ.bw op_m0_b, f_reg is op=0x0D; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_b { f_reg = zext(op_m0_b); }
+:MOVZ.bw op_m1_b, f_reg is op=0x0D; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_b { f_reg = zext(op_m1_b); }
+:MOVZ.bw f_reg_b, op_m0_w is op=0x0D; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_w { op_m0_w = zext(f_reg_b); }
+:MOVZ.bw f_reg_b, op_m1_w is op=0x0D; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_w { op_m1_w = zext(f_reg_b); }
+# F2 format
+:MOVZ.bw op_m0_b, op2_m0_w is op=0x0D; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_w { op2_m0_w = zext(op_m0_b); }
+:MOVZ.bw op_m0_b, op2_m1_w is op=0x0D; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_w { op2_m1_w = zext(op_m0_b); }
+:MOVZ.bw op_m1_b, op2_m0_w is op=0x0D; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_w { op2_m0_w = zext(op_m1_b); }
+:MOVZ.bw op_m1_b, op2_m1_w is op=0x0D; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_w { op2_m1_w = zext(op_m1_b); }
+
+# --- MOVZ.hw ---
+# F1 format
+:MOVZ.hw op_m0_h, f_reg is op=0x1D; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_h { f_reg = zext(op_m0_h); }
+:MOVZ.hw op_m1_h, f_reg is op=0x1D; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_h { f_reg = zext(op_m1_h); }
+:MOVZ.hw f_reg_h, op_m0_w is op=0x1D; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_w { op_m0_w = zext(f_reg_h); }
+:MOVZ.hw f_reg_h, op_m1_w is op=0x1D; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_w { op_m1_w = zext(f_reg_h); }
+# F2 format
+:MOVZ.hw op_m0_h, op2_m0_w is op=0x1D; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_w { op2_m0_w = zext(op_m0_h); }
+:MOVZ.hw op_m0_h, op2_m1_w is op=0x1D; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_w { op2_m1_w = zext(op_m0_h); }
+:MOVZ.hw op_m1_h, op2_m0_w is op=0x1D; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_w { op2_m0_w = zext(op_m1_h); }
+:MOVZ.hw op_m1_h, op2_m1_w is op=0x1D; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_w { op2_m1_w = zext(op_m1_h); }
+
+# --- MOVS.bh ---
+# F1 format
+:MOVS.bh op_m0_b, f_reg_h is op=0x0A; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_b { f_reg_h = sext(op_m0_b); }
+:MOVS.bh op_m1_b, f_reg_h is op=0x0A; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_b { f_reg_h = sext(op_m1_b); }
+:MOVS.bh f_reg_b, op_m0_h is op=0x0A; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_h { op_m0_h = sext(f_reg_b); }
+:MOVS.bh f_reg_b, op_m1_h is op=0x0A; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_h { op_m1_h = sext(f_reg_b); }
+# F2 format
+:MOVS.bh op_m0_b, op2_m0_h is op=0x0A; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_h { op2_m0_h = sext(op_m0_b); }
+:MOVS.bh op_m0_b, op2_m1_h is op=0x0A; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_h { op2_m1_h = sext(op_m0_b); }
+:MOVS.bh op_m1_b, op2_m0_h is op=0x0A; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_h { op2_m0_h = sext(op_m1_b); }
+:MOVS.bh op_m1_b, op2_m1_h is op=0x0A; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_h { op2_m1_h = sext(op_m1_b); }
+
+# --- MOVS.bw ---
+# F1 format
+:MOVS.bw op_m0_b, f_reg is op=0x0C; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_b { f_reg = sext(op_m0_b); }
+:MOVS.bw op_m1_b, f_reg is op=0x0C; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_b { f_reg = sext(op_m1_b); }
+:MOVS.bw f_reg_b, op_m0_w is op=0x0C; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_w { op_m0_w = sext(f_reg_b); }
+:MOVS.bw f_reg_b, op_m1_w is op=0x0C; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_w { op_m1_w = sext(f_reg_b); }
+# F2 format
+:MOVS.bw op_m0_b, op2_m0_w is op=0x0C; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_w { op2_m0_w = sext(op_m0_b); }
+:MOVS.bw op_m0_b, op2_m1_w is op=0x0C; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_w { op2_m1_w = sext(op_m0_b); }
+:MOVS.bw op_m1_b, op2_m0_w is op=0x0C; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_w { op2_m0_w = sext(op_m1_b); }
+:MOVS.bw op_m1_b, op2_m1_w is op=0x0C; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_w { op2_m1_w = sext(op_m1_b); }
+
+# --- MOVS.hw ---
+# F1 format
+:MOVS.hw op_m0_h, f_reg is op=0x1C; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_h { f_reg = sext(op_m0_h); }
+:MOVS.hw op_m1_h, f_reg is op=0x1C; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_h { f_reg = sext(op_m1_h); }
+:MOVS.hw f_reg_h, op_m0_w is op=0x1C; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_w { op_m0_w = sext(f_reg_h); }
+:MOVS.hw f_reg_h, op_m1_w is op=0x1C; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_w { op_m1_w = sext(f_reg_h); }
+# F2 format
+:MOVS.hw op_m0_h, op2_m0_w is op=0x1C; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_w { op2_m0_w = sext(op_m0_h); }
+:MOVS.hw op_m0_h, op2_m1_w is op=0x1C; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_w { op2_m1_w = sext(op_m0_h); }
+:MOVS.hw op_m1_h, op2_m0_w is op=0x1C; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_w { op2_m0_w = sext(op_m1_h); }
+:MOVS.hw op_m1_h, op2_m1_w is op=0x1C; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_w { op2_m1_w = sext(op_m1_h); }
+
+# --- TEST1 ---
+# F1 format
+:TEST1 op_m0_w, f_reg is op=0x87; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w {}
+:TEST1 op_m1_w, f_reg is op=0x87; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w {}
+:TEST1 f_reg, op_m0_w is op=0x87; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w {}
+:TEST1 f_reg, op_m1_w is op=0x87; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w {}
+# F2 format
+:TEST1 op_m0_w, op2_m0_w is op=0x87; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w {}
+:TEST1 op_m0_w, op2_m1_w is op=0x87; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w {}
+:TEST1 op_m1_w, op2_m0_w is op=0x87; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w {}
+:TEST1 op_m1_w, op2_m1_w is op=0x87; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w {}
+
+# --- SET1 ---
+# F1 format
+:SET1 op_m0_w, f_reg is op=0x97; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = f_reg | (1:4 << op_m0_w); }
+:SET1 op_m1_w, f_reg is op=0x97; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = f_reg | (1:4 << op_m1_w); }
+:SET1 f_reg, op_m0_w is op=0x97; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w | (1:4 << f_reg); }
+:SET1 f_reg, op_m1_w is op=0x97; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w | (1:4 << f_reg); }
+# F2 format
+:SET1 op_m0_w, op2_m0_w is op=0x97; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op2_m0_w | (1:4 << op_m0_w); }
+:SET1 op_m0_w, op2_m1_w is op=0x97; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op2_m1_w | (1:4 << op_m0_w); }
+:SET1 op_m1_w, op2_m0_w is op=0x97; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op2_m0_w | (1:4 << op_m1_w); }
+:SET1 op_m1_w, op2_m1_w is op=0x97; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op2_m1_w | (1:4 << op_m1_w); }
+
+# --- CLR1 ---
+# F1 format
+:CLR1 op_m0_w, f_reg is op=0xA7; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = f_reg & ~(1:4 << op_m0_w); }
+:CLR1 op_m1_w, f_reg is op=0xA7; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = f_reg & ~(1:4 << op_m1_w); }
+:CLR1 f_reg, op_m0_w is op=0xA7; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w & ~(1:4 << f_reg); }
+:CLR1 f_reg, op_m1_w is op=0xA7; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w & ~(1:4 << f_reg); }
+# F2 format
+:CLR1 op_m0_w, op2_m0_w is op=0xA7; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op2_m0_w & ~(1:4 << op_m0_w); }
+:CLR1 op_m0_w, op2_m1_w is op=0xA7; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op2_m1_w & ~(1:4 << op_m0_w); }
+:CLR1 op_m1_w, op2_m0_w is op=0xA7; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op2_m0_w & ~(1:4 << op_m1_w); }
+:CLR1 op_m1_w, op2_m1_w is op=0xA7; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op2_m1_w & ~(1:4 << op_m1_w); }
+
+# --- NOT1 ---
+# F1 format
+:NOT1 op_m0_w, f_reg is op=0xB7; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = f_reg ^ (1:4 << op_m0_w); }
+:NOT1 op_m1_w, f_reg is op=0xB7; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = f_reg ^ (1:4 << op_m1_w); }
+:NOT1 f_reg, op_m0_w is op=0xB7; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = op_m0_w ^ (1:4 << f_reg); }
+:NOT1 f_reg, op_m1_w is op=0xB7; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = op_m1_w ^ (1:4 << f_reg); }
+# F2 format
+:NOT1 op_m0_w, op2_m0_w is op=0xB7; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op2_m0_w ^ (1:4 << op_m0_w); }
+:NOT1 op_m0_w, op2_m1_w is op=0xB7; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op2_m1_w ^ (1:4 << op_m0_w); }
+:NOT1 op_m1_w, op2_m0_w is op=0xB7; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op2_m0_w ^ (1:4 << op_m1_w); }
+:NOT1 op_m1_w, op2_m1_w is op=0xB7; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op2_m1_w ^ (1:4 << op_m1_w); }
+
+# --- SETF ---
+# F1 format
+:SETF op_m0_b, f_reg_b is op=0x47; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = 0; }
+:SETF op_m1_b, f_reg_b is op=0x47; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = 0; }
+:SETF f_reg_b, op_m0_b is op=0x47; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = 0; }
+:SETF f_reg_b, op_m1_b is op=0x47; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = 0; }
+# F2 format
+:SETF op_m0_b, op2_m0_b is op=0x47; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = 0; }
+:SETF op_m0_b, op2_m1_b is op=0x47; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = 0; }
+:SETF op_m1_b, op2_m0_b is op=0x47; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = 0; }
+:SETF op_m1_b, op2_m1_b is op=0x47; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = 0; }
+
+# --- IN.b ---
+# F1 format
+:IN.b op_m0_b, f_reg_b is op=0x20; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b; }
+:IN.b op_m1_b, f_reg_b is op=0x20; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b; }
+:IN.b f_reg_b, op_m0_b is op=0x20; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = f_reg_b; }
+:IN.b f_reg_b, op_m1_b is op=0x20; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = f_reg_b; }
+# F2 format
+:IN.b op_m0_b, op2_m0_b is op=0x20; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b; }
+:IN.b op_m0_b, op2_m1_b is op=0x20; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b; }
+:IN.b op_m1_b, op2_m0_b is op=0x20; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b; }
+:IN.b op_m1_b, op2_m1_b is op=0x20; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b; }
+
+# --- IN.h ---
+# F1 format
+:IN.h op_m0_h, f_reg_h is op=0x22; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h; }
+:IN.h op_m1_h, f_reg_h is op=0x22; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h; }
+:IN.h f_reg_h, op_m0_h is op=0x22; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = f_reg_h; }
+:IN.h f_reg_h, op_m1_h is op=0x22; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = f_reg_h; }
+# F2 format
+:IN.h op_m0_h, op2_m0_h is op=0x22; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h; }
+:IN.h op_m0_h, op2_m1_h is op=0x22; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h; }
+:IN.h op_m1_h, op2_m0_h is op=0x22; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h; }
+:IN.h op_m1_h, op2_m1_h is op=0x22; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h; }
+
+# --- IN.w ---
+# F1 format
+:IN.w op_m0_w, f_reg is op=0x24; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w; }
+:IN.w op_m1_w, f_reg is op=0x24; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w; }
+:IN.w f_reg, op_m0_w is op=0x24; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = f_reg; }
+:IN.w f_reg, op_m1_w is op=0x24; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = f_reg; }
+# F2 format
+:IN.w op_m0_w, op2_m0_w is op=0x24; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w; }
+:IN.w op_m0_w, op2_m1_w is op=0x24; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w; }
+:IN.w op_m1_w, op2_m0_w is op=0x24; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w; }
+:IN.w op_m1_w, op2_m1_w is op=0x24; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w; }
+
+# --- OUT.b ---
+# F1 format
+:OUT.b op_m0_b, f_reg_b is op=0x21; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_b; op_m0_b { f_reg_b = op_m0_b; }
+:OUT.b op_m1_b, f_reg_b is op=0x21; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_b; op_m1_b { f_reg_b = op_m1_b; }
+:OUT.b f_reg_b, op_m0_b is op=0x21; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_b { op_m0_b = f_reg_b; }
+:OUT.b f_reg_b, op_m1_b is op=0x21; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_b { op_m1_b = f_reg_b; }
+# F2 format
+:OUT.b op_m0_b, op2_m0_b is op=0x21; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_b { op2_m0_b = op_m0_b; }
+:OUT.b op_m0_b, op2_m1_b is op=0x21; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_b { op2_m1_b = op_m0_b; }
+:OUT.b op_m1_b, op2_m0_b is op=0x21; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_b { op2_m0_b = op_m1_b; }
+:OUT.b op_m1_b, op2_m1_b is op=0x21; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_b { op2_m1_b = op_m1_b; }
+
+# --- OUT.h ---
+# F1 format
+:OUT.h op_m0_h, f_reg_h is op=0x23; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg_h; op_m0_h { f_reg_h = op_m0_h; }
+:OUT.h op_m1_h, f_reg_h is op=0x23; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg_h; op_m1_h { f_reg_h = op_m1_h; }
+:OUT.h f_reg_h, op_m0_h is op=0x23; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_h { op_m0_h = f_reg_h; }
+:OUT.h f_reg_h, op_m1_h is op=0x23; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_h { op_m1_h = f_reg_h; }
+# F2 format
+:OUT.h op_m0_h, op2_m0_h is op=0x23; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_h { op2_m0_h = op_m0_h; }
+:OUT.h op_m0_h, op2_m1_h is op=0x23; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_h { op2_m1_h = op_m0_h; }
+:OUT.h op_m1_h, op2_m0_h is op=0x23; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_h { op2_m0_h = op_m1_h; }
+:OUT.h op_m1_h, op2_m1_h is op=0x23; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_h { op2_m1_h = op_m1_h; }
+
+# --- OUT.w ---
+# F1 format
+:OUT.w op_m0_w, f_reg is op=0x25; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = op_m0_w; }
+:OUT.w op_m1_w, f_reg is op=0x25; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = op_m1_w; }
+:OUT.w f_reg, op_m0_w is op=0x25; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = f_reg; }
+:OUT.w f_reg, op_m1_w is op=0x25; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = f_reg; }
+# F2 format
+:OUT.w op_m0_w, op2_m0_w is op=0x25; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = op_m0_w; }
+:OUT.w op_m0_w, op2_m1_w is op=0x25; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = op_m0_w; }
+:OUT.w op_m1_w, op2_m0_w is op=0x25; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = op_m1_w; }
+:OUT.w op_m1_w, op2_m1_w is op=0x25; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = op_m1_w; }
+
+# --- TASI ---
+:TASI op_m0_b is op=0xE0; op_m0_b {
+    local tmp:1 = op_m0_b;
+    op_m0_b = 0xff;
+}
+:TASI op_m1_b is op=0xE1; op_m1_b {
+    local tmp:1 = op_m1_b;
+    op_m1_b = 0xff;
+}
+
+# --- TESTB ---
+:TESTB op_m0_b is op=0xf0; op_m0_b {
+    local tmp:1 = op_m0_b;
+}
+:TESTB op_m1_b is op=0xf1; op_m1_b {
+    local tmp:1 = op_m1_b;
+}
+
+# --- TESTH ---
+:TESTH op_m0_h is op=0xf2; op_m0_h {
+    local tmp:2 = op_m0_h;
+}
+:TESTH op_m1_h is op=0xf3; op_m1_h {
+    local tmp:2 = op_m1_h;
+}
+
+# --- TESTW ---
+:TESTW op_m0_w is op=0xf4; op_m0_w {
+    local tmp:4 = op_m0_w;
+}
+:TESTW op_m1_w is op=0xf5; op_m1_w {
+    local tmp:4 = op_m1_w;
+}
+
+# --- PUSHM / POPM ---
+:PUSHM op_m0_w is op=0xec; op_m0_w {}
+:PUSHM op_m1_w is op=0xed; op_m1_w {}
+:POPM op_m1_w is op=0xe5; op_m1_w {}
+
+# --- MOVEA.b ---
+# F1 format
+:MOVEA.b op_m0_b, f_reg is op=0x40; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_b { f_reg = &op_m0_b; }
+:MOVEA.b op_m1_b, f_reg is op=0x40; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_b { f_reg = &op_m1_b; }
+:MOVEA.b f_reg_b, op_m0_w is op=0x40; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_b; op_m0_w { op_m0_w = 0; }
+:MOVEA.b f_reg_b, op_m1_w is op=0x40; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_b; op_m1_w { op_m1_w = 0; }
+# F2 format
+:MOVEA.b op_m0_b, op2_m0_w is op=0x40; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_b; op2_m0_w { op2_m0_w = &op_m0_b; }
+:MOVEA.b op_m0_b, op2_m1_w is op=0x40; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_b; op2_m1_w { op2_m1_w = &op_m0_b; }
+:MOVEA.b op_m1_b, op2_m0_w is op=0x40; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_b; op2_m0_w { op2_m0_w = &op_m1_b; }
+:MOVEA.b op_m1_b, op2_m1_w is op=0x40; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_b; op2_m1_w { op2_m1_w = &op_m1_b; }
+
+# --- MOVEA.h ---
+# F1 format
+:MOVEA.h op_m0_h, f_reg is op=0x42; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_h { f_reg = &op_m0_h; }
+:MOVEA.h op_m1_h, f_reg is op=0x42; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_h { f_reg = &op_m1_h; }
+:MOVEA.h f_reg_h, op_m0_w is op=0x42; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg_h; op_m0_w { op_m0_w = 0; }
+:MOVEA.h f_reg_h, op_m1_w is op=0x42; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg_h; op_m1_w { op_m1_w = 0; }
+# F2 format
+:MOVEA.h op_m0_h, op2_m0_w is op=0x42; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_h; op2_m0_w { op2_m0_w = &op_m0_h; }
+:MOVEA.h op_m0_h, op2_m1_w is op=0x42; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_h; op2_m1_w { op2_m1_w = &op_m0_h; }
+:MOVEA.h op_m1_h, op2_m0_w is op=0x42; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_h; op2_m0_w { op2_m0_w = &op_m1_h; }
+:MOVEA.h op_m1_h, op2_m1_w is op=0x42; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_h; op2_m1_w { op2_m1_w = &op_m1_h; }
+
+# --- MOVEA.w ---
+# F1 format
+:MOVEA.w op_m0_w, f_reg is op=0x44; f_type=0 & m2_flag=1 & m1_flag=0 & f_reg; op_m0_w { f_reg = &op_m0_w; }
+:MOVEA.w op_m1_w, f_reg is op=0x44; f_type=0 & m2_flag=1 & m1_flag=1 & f_reg; op_m1_w { f_reg = &op_m1_w; }
+:MOVEA.w f_reg, op_m0_w is op=0x44; f_type=0 & m2_flag=0 & m1_flag=0 & f_reg; op_m0_w { op_m0_w = 0; }
+:MOVEA.w f_reg, op_m1_w is op=0x44; f_type=0 & m2_flag=0 & m1_flag=1 & f_reg; op_m1_w { op_m1_w = 0; }
+# F2 format
+:MOVEA.w op_m0_w, op2_m0_w is op=0x44; f_type=1 & m1_flag=0 & m2_flag=0; op_m0_w; op2_m0_w { op2_m0_w = &op_m0_w; }
+:MOVEA.w op_m0_w, op2_m1_w is op=0x44; f_type=1 & m1_flag=0 & m2_flag=1; op_m0_w; op2_m1_w { op2_m1_w = &op_m0_w; }
+:MOVEA.w op_m1_w, op2_m0_w is op=0x44; f_type=1 & m1_flag=1 & m2_flag=0; op_m1_w; op2_m0_w { op2_m0_w = &op_m1_w; }
+:MOVEA.w op_m1_w, op2_m1_w is op=0x44; f_type=1 & m1_flag=1 & m2_flag=1; op_m1_w; op2_m1_w { op2_m1_w = &op_m1_w; }
+
+# --- Decrement and Branch (C6/C7) ---
+:DBV    mod_reg, br_target16 is op=0xC6; mod_mode=0 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x01) != 0) goto br_target16; }
+:DBL    mod_reg, br_target16 is op=0xC6; mod_mode=1 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x08) != 0) goto br_target16; }
+:DBE    mod_reg, br_target16 is op=0xC6; mod_mode=2 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x02) != 0) goto br_target16; }
+:DBNH   mod_reg, br_target16 is op=0xC6; mod_mode=3 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x0a) != 0) goto br_target16; }
+:DBN    mod_reg, br_target16 is op=0xC6; mod_mode=4 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x04) != 0) goto br_target16; }
+:DBR    mod_reg, br_target16 is op=0xC6; mod_mode=5 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0) goto br_target16; }
+:DBLT   mod_reg, br_target16 is op=0xC6; mod_mode=6 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x10) != 0) goto br_target16; }
+:DBLE   mod_reg, br_target16 is op=0xC6; mod_mode=7 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x12) != 0) goto br_target16; }
+
+:DBNV   mod_reg, br_target16 is op=0xC7; mod_mode=0 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x01) == 0) goto br_target16; }
+:DBNL   mod_reg, br_target16 is op=0xC7; mod_mode=1 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x08) == 0) goto br_target16; }
+:DBNE   mod_reg, br_target16 is op=0xC7; mod_mode=2 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x02) == 0) goto br_target16; }
+:DBH    mod_reg, br_target16 is op=0xC7; mod_mode=3 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x0a) == 0) goto br_target16; }
+:DBP    mod_reg, br_target16 is op=0xC7; mod_mode=4 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x04) == 0) goto br_target16; }
+:DBGE   mod_reg, br_target16 is op=0xC7; mod_mode=6 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x10) == 0) goto br_target16; }
+:DBGT   mod_reg, br_target16 is op=0xC7; mod_mode=7 & mod_reg; br_target16 { mod_reg = mod_reg - 1; if (mod_reg != 0 && (PSW & 0x12) == 0) goto br_target16; }
+
+# --- MOVCFU.b (0x0A) ---
+:MOVCFU.b op_m0_b, f7_op, op2_m0_b, f7_op2 is op=0x58; f7_m1=0 & f7_m2=0 & f7_sub=0x0a; op_m0_b; f7_op; op2_m0_b; f7_op2 {}
+:MOVCFU.b op_m0_b, f7_op, op2_m1_b, f7_op2 is op=0x58; f7_m1=0 & f7_m2=1 & f7_sub=0x0a; op_m0_b; f7_op; op2_m1_b; f7_op2 {}
+:MOVCFU.b op_m1_b, f7_op, op2_m0_b, f7_op2 is op=0x58; f7_m1=1 & f7_m2=0 & f7_sub=0x0a; op_m1_b; f7_op; op2_m0_b; f7_op2 {}
+:MOVCFU.b op_m1_b, f7_op, op2_m1_b, f7_op2 is op=0x58; f7_m1=1 & f7_m2=1 & f7_sub=0x0a; op_m1_b; f7_op; op2_m1_b; f7_op2 {}
+
+# --- MOVCFU.h (0x0A) ---
+:MOVCFU.h op_m0_h, f7_op, op2_m0_h, f7_op2 is op=0x5a; f7_m1=0 & f7_m2=0 & f7_sub=0x0a; op_m0_h; f7_op; op2_m0_h; f7_op2 {}
+:MOVCFU.h op_m0_h, f7_op, op2_m1_h, f7_op2 is op=0x5a; f7_m1=0 & f7_m2=1 & f7_sub=0x0a; op_m0_h; f7_op; op2_m1_h; f7_op2 {}
+:MOVCFU.h op_m1_h, f7_op, op2_m0_h, f7_op2 is op=0x5a; f7_m1=1 & f7_m2=0 & f7_sub=0x0a; op_m1_h; f7_op; op2_m0_h; f7_op2 {}
+:MOVCFU.h op_m1_h, f7_op, op2_m1_h, f7_op2 is op=0x5a; f7_m1=1 & f7_m2=1 & f7_sub=0x0a; op_m1_h; f7_op; op2_m1_h; f7_op2 {}
+
+# --- MOVCFU.w (0x0A) ---
+:MOVCFU.w op_m0_w, f7_op, op2_m0_w, f7_op2 is op=0x5c; f7_m1=0 & f7_m2=0 & f7_sub=0x0a; op_m0_w; f7_op; op2_m0_w; f7_op2 {}
+:MOVCFU.w op_m0_w, f7_op, op2_m1_w, f7_op2 is op=0x5c; f7_m1=0 & f7_m2=1 & f7_sub=0x0a; op_m0_w; f7_op; op2_m1_w; f7_op2 {}
+:MOVCFU.w op_m1_w, f7_op, op2_m0_w, f7_op2 is op=0x5c; f7_m1=1 & f7_m2=0 & f7_sub=0x0a; op_m1_w; f7_op; op2_m0_w; f7_op2 {}
+:MOVCFU.w op_m1_w, f7_op, op2_m1_w, f7_op2 is op=0x5c; f7_m1=1 & f7_m2=1 & f7_sub=0x0a; op_m1_w; f7_op; op2_m1_w; f7_op2 {}

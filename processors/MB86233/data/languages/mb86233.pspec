@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<processor_spec>
+  <programcounter register="pc"/>
+  <volatile outputop="write" inputop="read">
+    <range space="io" first="0x0" last="0xffff"/>
+  </volatile>
+  <default_symbols>
+    <symbol name="reset" address="code:0x0" entry="true"/>
+    <symbol name="interrupt" address="code:0x4" entry="true"/>
+  </default_symbols>
+</processor_spec>

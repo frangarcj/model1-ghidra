@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<compiler_spec>
+  <data_organization>
+    <pointer_size value="4"/>
+    <short_size value="2"/>
+    <integer_size value="4"/>
+    <long_size value="4"/>
+    <long_long_size value="8"/>
+    <float_size value="4"/>
+    <double_size value="8"/>
+  </data_organization>
+  <global>
+    <range space="code"/>
+    <range space="data"/>
+    <range space="io"/>
+  </global>
+  <stackpointer register="sp" space="data" growth="negative"/>
+  <default_proto>
+    <prototype name="__stdcall" extrapop="unknown" stackshift="4">
+      <input>
+        <pentry minsize="1" maxsize="4">
+          <register name="a"/>
+        </pentry>
+        <pentry minsize="1" maxsize="4">
+          <register name="b"/>
+        </pentry>
+        <pentry minsize="1" maxsize="4" align="4">
+          <addr offset="4" space="stack"/>
+        </pentry>
+      </input>
+      <output>
+        <pentry minsize="1" maxsize="4">
+          <register name="d"/>
+        </pentry>
+      </output>
+      <unaffected>
+        <register name="sp"/>
+        <register name="b0"/>
+        <register name="b1"/>
+        <register name="x0"/>
+        <register name="x1"/>
+        <register name="x2"/>
+        <register name="i0"/>
+        <register name="i1"/>
+        <register name="i2"/>
+        <register name="rpc"/>
+        <register name="st"/>
+      </unaffected>
+    </prototype>
+  </default_proto>
+</compiler_spec>

@@ -1,0 +1,440 @@
+define endian=little;
+define alignment=4;
+
+# Define Memory Spaces
+define space code     type=ram_space size=4 default;
+define space data     type=ram_space size=4;
+define space io       type=ram_space size=4;
+define space register type=register_space size=4;
+
+# Registers - Bank 0 (Offsets 0x00-0x3c)
+define register offset=0x00 size=4 [
+    b0 b1 x0 x1 x2 i0 i1 i2 sp pag vsm dmc c0 c1 pc dummy
+];
+
+# Registers - Bank 1 (Offsets 0x40-0x7c)
+define register offset=0x40 size=4 [
+    a ah al b bh bl c ch cl d dh dl p ph pl sft
+];
+
+# Registers - Register File rf0-rff (Offsets 0x80-0xbc)
+define register offset=0x80 size=4 [
+    rf0 rf1 rf2 rf3 rf4 rf5 rf6 rf7 rf8 rf9 rfa rfb rfc rfd rfe rff
+];
+
+# Registers - Bank 3 (Offsets 0xc0-0xfc)
+define register offset=0xc0 size=4 [
+    sio0 si1 pio pioa rpc r35 r36 r37 pad mod ear st mask tim cx dx
+];
+
+# Internal registers for emulation state
+define register offset=0x100 size=4 [
+    vsmr pcs0 pcs1 pcs2 pcs3 jmp_temp
+];
+
+# Define Status Flags in 'st' register (matches MAME's st_flags)
+define bitrange st_ZRD=st[1,1]  # F_ZRD = 0x02
+               st_SGD=st[3,1]  # F_SGD = 0x08
+               st_ZC0=st[30,1] # F_ZC0 = 0x40000000
+               st_ZC1=st[31,1];# F_ZC1 = 0x80000000
+
+# Token and field definitions
+define token instr(32)
+    op         = (26, 31)
+    alu        = (21, 25)
+    op18       = (18, 20)
+    r2         = (9, 17)
+    r1         = (0, 8)
+    
+    # Fields for reg-reg moves
+    reg1       = (0, 5)
+    reg2       = (9, 14)
+    mov_sub    = (15, 17) # top 3 bits of r2
+    
+    # Load 24-bit value / LDI
+    imm24      = (0, 23)
+    imm24_s    = (0, 23) signed
+    reg_ldi    = (24, 29)
+    op0e_sub   = (24, 25)
+    
+    # Conditional branches
+    cond_code  = (20, 24)
+    br_sub     = (17, 19)
+    br_target  = (0, 15)
+    br_reg_flag= (14, 14)
+    reg_br     = (0, 4)
+    inv        = (30, 30)
+    
+    # stmh round modes
+    stmh_fp    = (0, 0)
+    stmh_round = (1, 2)
+    
+    # clr0 bit fields (subset of r1)
+    clr_a      = (2, 2)
+    clr_b      = (3, 3)
+    clr_d      = (4, 4)
+    
+    # Addressing mode fields for Addr0 (r1)
+    r1_mode    = (7, 8)
+    r1_offset  = (0, 6)
+    r1_sext5   = (0, 4) signed
+    r1_bit5    = (5, 5)
+    r1_bit6    = (6, 6)
+    
+    # Addressing mode fields for Addr1 (r2)
+    r2_mode    = (16, 17)
+    r2_offset  = (9, 15)
+    r2_sext5   = (9, 13) signed
+    r2_bit5    = (14, 14)
+    r2_bit6    = (15, 15)
+;
+
+# Attach variables to register fields
+attach variables [ reg1 reg2 reg_ldi ] [
+    b0 b1 x0 x1 x2 i0 i1 i2 sp pag vsm dmc c0 c1 pc dummy
+    a ah al b bh bl c ch cl d dh dl p ph pl sft
+    rf0 rf1 rf2 rf3 rf4 rf5 rf6 rf7 rf8 rf9 rfa rfb rfc rfd rfe rff
+    sio0 si1 pio pioa rpc r35 r36 r37 pad mod ear st mask tim cx dx
+];
+
+attach variables [ reg_br ] [
+    b0 b1 x0 x1 x2 i0 i1 i2 sp pag vsm dmc c0 c1 pc dummy
+    a ah al b bh bl c ch cl d dh dl p ph pl sft
+];
+
+# Macros for flag updates
+macro update_flags_int(val) {
+    st_ZRD = (val == 0);
+    st_SGD = (val s< 0);
+}
+
+macro update_flags_float(val) {
+    st_ZRD = ((val & 0x7fffffff) == 0);
+    st_SGD = ((val & 0x80000000) != 0);
+}
+
+# Subconstructors for memory addressing modes
+# Addr0 (r1) -> accesses 'data' space (byte-addressing, scaled by 4)
+Addr0: "$r1_offset" is r1_mode=0 & r1_offset { local ea:4 = r1_offset * 4; export *[data]:4 ea; }
+Addr0: "$r1_offset(x0)" is r1_mode=1 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; export *[data]:4 ea; }
+Addr0: "$r1_offset(x0+)" is r1_mode=2 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; x0 = x0 + i0; export *[data]:4 ea; }
+Addr0: "(bx0)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5=0 { local ea:4 = (b0 + x0) * 4; export *[data]:4 ea; }
+Addr0: "(bx0+r1_sext5)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5 { local ea:4 = (b0 + x0) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0: "(x0)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5=0 { local ea:4 = x0 * 4; export *[data]:4 ea; }
+Addr0: "(x0+r1_sext5)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5 { local ea:4 = x0 * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0: "[bx0]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (b0 + (x0 & vsmr)) * 4; export *[data]:4 ea; }
+Addr0: "[bx0+r1_sext5]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5 { local ea:4 = (b0 + (x0 & vsmr)) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0: "[x0]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (x0 & vsmr) * 4; export *[data]:4 ea; }
+Addr0: "[x0+r1_sext5]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5 { local ea:4 = (x0 & vsmr) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+
+# Addr0_b (r1 banked) -> accesses 'data' space + 0x200
+Addr0_b: "$r1_offset+0x200" is r1_mode=0 & r1_offset { local ea:4 = (r1_offset + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "$r1_offset(x0)+0x200" is r1_mode=1 & r1_offset { local ea:4 = (r1_offset + b0 + x0 + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "$r1_offset(x0+)+0x200" is r1_mode=2 & r1_offset { local ea:4 = (r1_offset + b0 + x0 + 0x200) * 4; x0 = x0 + i0; export *[data]:4 ea; }
+Addr0_b: "(bx0)+0x200" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5=0 { local ea:4 = (b0 + x0 + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "(bx0+r1_sext5)+0x200" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5 { local ea:4 = (b0 + x0 + 0x200) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0_b: "(x0)+0x200" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5=0 { local ea:4 = (x0 + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "(x0+r1_sext5)+0x200" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5 { local ea:4 = (x0 + 0x200) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0_b: "[bx0]+0x200" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (b0 + (x0 & vsmr) + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "[bx0+r1_sext5]+0x200" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5 { local ea:4 = (b0 + (x0 & vsmr) + 0x200) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+Addr0_b: "[x0]+0x200" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5=0 { local ea:4 = ((x0 & vsmr) + 0x200) * 4; export *[data]:4 ea; }
+Addr0_b: "[x0+r1_sext5]+0x200" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5 { local ea:4 = ((x0 & vsmr) + 0x200) * 4; x0 = x0 + r1_sext5; export *[data]:4 ea; }
+
+# Addr0_e (r1 external/IO) -> accesses 'io' space
+Addr0_e: "$r1_offset" is r1_mode=0 & r1_offset { local ea:4 = r1_offset * 4; export *[io]:4 ea; }
+Addr0_e: "$r1_offset(x0)" is r1_mode=1 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; export *[io]:4 ea; }
+Addr0_e: "$r1_offset(x0+)" is r1_mode=2 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; x0 = x0 + i0; export *[io]:4 ea; }
+Addr0_e: "(bx0)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5=0 { local ea:4 = (b0 + x0) * 4; export *[io]:4 ea; }
+Addr0_e: "(bx0+r1_sext5)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5 { local ea:4 = (b0 + x0) * 4; x0 = x0 + r1_sext5; export *[io]:4 ea; }
+Addr0_e: "(x0)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5=0 { local ea:4 = x0 * 4; export *[io]:4 ea; }
+Addr0_e: "(x0+r1_sext5)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5 { local ea:4 = x0 * 4; x0 = x0 + r1_sext5; export *[io]:4 ea; }
+Addr0_e: "[bx0]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (b0 + (x0 & vsmr)) * 4; export *[io]:4 ea; }
+Addr0_e: "[bx0+r1_sext5]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5 { local ea:4 = (b0 + (x0 & vsmr)) * 4; x0 = x0 + r1_sext5; export *[io]:4 ea; }
+Addr0_e: "[x0]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (x0 & vsmr) * 4; export *[io]:4 ea; }
+Addr0_e: "[x0+r1_sext5]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5 { local ea:4 = (x0 & vsmr) * 4; x0 = x0 + r1_sext5; export *[io]:4 ea; }
+
+# Addr0_o (r1 ROM) -> accesses 'code' space
+Addr0_o: "$r1_offset" is r1_mode=0 & r1_offset { local ea:4 = r1_offset * 4; export *[code]:4 ea; }
+Addr0_o: "$r1_offset(x0)" is r1_mode=1 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; export *[code]:4 ea; }
+Addr0_o: "$r1_offset(x0+)" is r1_mode=2 & r1_offset { local ea:4 = (r1_offset + b0 + x0) * 4; x0 = x0 + i0; export *[code]:4 ea; }
+Addr0_o: "(bx0)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5=0 { local ea:4 = (b0 + x0) * 4; export *[code]:4 ea; }
+Addr0_o: "(bx0+r1_sext5)" is r1_mode=3 & r1_bit5=0 & r1_bit6=0 & r1_sext5 { local ea:4 = (b0 + x0) * 4; x0 = x0 + r1_sext5; export *[code]:4 ea; }
+Addr0_o: "(x0)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5=0 { local ea:4 = x0 * 4; export *[code]:4 ea; }
+Addr0_o: "(x0+r1_sext5)" is r1_mode=3 & r1_bit5=1 & r1_bit6=0 & r1_sext5 { local ea:4 = x0 * 4; x0 = x0 + r1_sext5; export *[code]:4 ea; }
+Addr0_o: "[bx0]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (b0 + (x0 & vsmr)) * 4; export *[code]:4 ea; }
+Addr0_o: "[bx0+r1_sext5]" is r1_mode=3 & r1_bit5=0 & r1_bit6=1 & r1_sext5 { local ea:4 = (b0 + (x0 & vsmr)) * 4; x0 = x0 + r1_sext5; export *[code]:4 ea; }
+Addr0_o: "[x0]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5=0 { local ea:4 = (x0 & vsmr) * 4; export *[code]:4 ea; }
+Addr0_o: "[x0+r1_sext5]" is r1_mode=3 & r1_bit5=1 & r1_bit6=1 & r1_sext5 { local ea:4 = (x0 & vsmr) * 4; x0 = x0 + r1_sext5; export *[code]:4 ea; }
+
+
+# Addr1 (r2) -> accesses 'data' space (using x1, b1, i1)
+Addr1: "$r2_offset" is r2_mode=0 & r2_offset { local ea:4 = r2_offset * 4; export *[data]:4 ea; }
+Addr1: "$r2_offset(x1)" is r2_mode=1 & r2_offset { local ea:4 = (r2_offset + b1 + x1) * 4; export *[data]:4 ea; }
+Addr1: "$r2_offset(x1+)" is r2_mode=2 & r2_offset { local ea:4 = (r2_offset + b1 + x1) * 4; x1 = x1 + i1; export *[data]:4 ea; }
+Addr1: "(bx1)" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5=0 { local ea:4 = (b1 + x1) * 4; export *[data]:4 ea; }
+Addr1: "(bx1+r2_sext5)" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5 { local ea:4 = (b1 + x1) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1: "(x1)" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5=0 { local ea:4 = x1 * 4; export *[data]:4 ea; }
+Addr1: "(x1+r2_sext5)" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5 { local ea:4 = x1 * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1: "[bx1]" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5=0 { local ea:4 = (b1 + (x1 & vsmr)) * 4; export *[data]:4 ea; }
+Addr1: "[bx1+r2_sext5]" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5 { local ea:4 = (b1 + (x1 & vsmr)) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1: "[x1]" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5=0 { local ea:4 = (x1 & vsmr) * 4; export *[data]:4 ea; }
+Addr1: "[x1+r2_sext5]" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5 { local ea:4 = (x1 & vsmr) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+
+# Addr1_b (r2 banked) -> accesses 'data' space + 0x200 (using x1, b1, i1)
+Addr1_b: "$r2_offset+0x200" is r2_mode=0 & r2_offset { local ea:4 = (r2_offset + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "$r2_offset(x1)+0x200" is r2_mode=1 & r2_offset { local ea:4 = (r2_offset + b1 + x1 + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "$r2_offset(x1+)+0x200" is r2_mode=2 & r2_offset { local ea:4 = (r2_offset + b1 + x1 + 0x200) * 4; x1 = x1 + i1; export *[data]:4 ea; }
+Addr1_b: "(bx1)+0x200" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5=0 { local ea:4 = (b1 + x1 + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "(bx1+r2_sext5)+0x200" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5 { local ea:4 = (b1 + x1 + 0x200) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1_b: "(x1)+0x200" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5=0 { local ea:4 = (x1 + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "(x1+r2_sext5)+0x200" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5 { local ea:4 = (x1 + 0x200) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1_b: "[bx1]+0x200" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5=0 { local ea:4 = (b1 + (x1 & vsmr) + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "[bx1+r2_sext5]+0x200" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5 { local ea:4 = (b1 + (x1 & vsmr) + 0x200) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+Addr1_b: "[x1]+0x200" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5=0 { local ea:4 = ((x1 & vsmr) + 0x200) * 4; export *[data]:4 ea; }
+Addr1_b: "[x1+r2_sext5]+0x200" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5 { local ea:4 = ((x1 & vsmr) + 0x200) * 4; x1 = x1 + r2_sext5; export *[data]:4 ea; }
+
+# Addr1_e (r2 external/IO) -> accesses 'io' space (using x1, b1, i1)
+Addr1_e: "$r2_offset" is r2_mode=0 & r2_offset { local ea:4 = r2_offset * 4; export *[io]:4 ea; }
+Addr1_e: "$r2_offset(x1)" is r2_mode=1 & r2_offset { local ea:4 = (r2_offset + b1 + x1) * 4; export *[io]:4 ea; }
+Addr1_e: "$r2_offset(x1+)" is r2_mode=2 & r2_offset { local ea:4 = (r2_offset + b1 + x1) * 4; x1 = x1 + i1; export *[io]:4 ea; }
+Addr1_e: "(bx1)" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5=0 { local ea:4 = (b1 + x1) * 4; export *[io]:4 ea; }
+Addr1_e: "(bx1+r2_sext5)" is r2_mode=3 & r2_bit5=0 & r2_bit6=0 & r2_sext5 { local ea:4 = (b1 + x1) * 4; x1 = x1 + r2_sext5; export *[io]:4 ea; }
+Addr1_e: "(x1)" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5=0 { local ea:4 = x1 * 4; export *[io]:4 ea; }
+Addr1_e: "(x1+r2_sext5)" is r2_mode=3 & r2_bit5=1 & r2_bit6=0 & r2_sext5 { local ea:4 = x1 * 4; x1 = x1 + r2_sext5; export *[io]:4 ea; }
+Addr1_e: "[bx1]" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5=0 { local ea:4 = (b1 + (x1 & vsmr)) * 4; export *[io]:4 ea; }
+Addr1_e: "[bx1+r2_sext5]" is r2_mode=3 & r2_bit5=0 & r2_bit6=1 & r2_sext5 { local ea:4 = (b1 + (x1 & vsmr)) * 4; x1 = x1 + r2_sext5; export *[io]:4 ea; }
+Addr1_e: "[x1]" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5=0 { local ea:4 = (x1 & vsmr) * 4; export *[io]:4 ea; }
+Addr1_e: "[x1+r2_sext5]" is r2_mode=3 & r2_bit5=1 & r2_bit6=1 & r2_sext5 { local ea:4 = (x1 & vsmr) * 4; x1 = x1 + r2_sext5; export *[io]:4 ea; }
+
+
+# AluPrefix constructors to print and execute ALU prefix operations
+AluPrefix: "" is alu=0 {}
+AluPrefix: "andd : " is alu=1 { d = d & a; update_flags_int(d); }
+AluPrefix: "orad : " is alu=2 { d = d | a; update_flags_int(d); }
+AluPrefix: "eord : " is alu=3 { d = d ^ a; update_flags_int(d); }
+AluPrefix: "notd : " is alu=4 { d = ~d; update_flags_int(d); }
+AluPrefix: "fcpd : " is alu=5 { local tmp:4 = d f- a; update_flags_float(tmp); }
+AluPrefix: "fadd : " is alu=6 { d = d f+ a; update_flags_float(d); }
+AluPrefix: "fsbd : " is alu=7 { d = d f- a; update_flags_float(d); }
+AluPrefix: "fml : " is alu=8 { p = a f* b; }
+AluPrefix: "fmsd : " is alu=9 { local next_p:4 = a f* b; d = d f+ p; p = next_p; update_flags_float(d); }
+AluPrefix: "fmrd : " is alu=0xa { local next_p:4 = a f* b; d = d f- p; p = next_p; update_flags_float(d); }
+AluPrefix: "fabd : " is alu=0xb { d = d & 0x7fffffff; update_flags_float(d); } # abs (clears sign bit)
+AluPrefix: "fsmd : " is alu=0xc { d = d f+ p; update_flags_float(d); }
+AluPrefix: "fspd : " is alu=0xd { local next_p:4 = a f* b; d = p; p = next_p; update_flags_float(d); }
+AluPrefix: "cxfd : " is alu=0xe { d = int2float(d); update_flags_int(d); }
+AluPrefix: "cfxd : " is alu=0xf { d = trunc(d); update_flags_int(d); }
+AluPrefix: "fdvd : " is alu=0x10 { d = d f/ a; update_flags_float(d); }
+AluPrefix: "fned : " is alu=0x11 { d = d ^ 0x80000000; update_flags_float(d); } # negate (XOR sign bit)
+AluPrefix: "d=b+a : " is alu=0x13 { d = b f+ a; update_flags_float(d); }
+AluPrefix: "d=b-a : " is alu=0x14 { d = b f- a; update_flags_float(d); }
+AluPrefix: "lsrd : " is alu=0x16 { d = d >> sft; update_flags_int(d); }
+AluPrefix: "lsld : " is alu=0x17 { d = d << sft; update_flags_int(d); }
+AluPrefix: "asrd : " is alu=0x18 { d = d s>> sft; update_flags_int(d); }
+AluPrefix: "asld : " is alu=0x19 { d = d << sft; update_flags_int(d); }
+AluPrefix: "addd : " is alu=0x1a { d = d + a; update_flags_int(d); }
+AluPrefix: "subd : " is alu=0x1b { d = d - a; update_flags_int(d); }
+
+
+# Branch Condition codes (formatting & evaluation)
+Cond: "zrd" is cond_code=0x00 & inv=0 { local cond_val:1 = st_ZRD; export cond_val; }
+Cond: "!zrd" is cond_code=0x00 & inv=1 { local cond_val:1 = !st_ZRD; export cond_val; }
+Cond: "ged" is cond_code=0x01 & inv=0 { local cond_val:1 = !st_SGD; export cond_val; }
+Cond: "!ged" is cond_code=0x01 & inv=1 { local cond_val:1 = st_SGD; export cond_val; }
+Cond: "led" is cond_code=0x02 & inv=0 { local cond_val:1 = (st_ZRD || st_SGD); export cond_val; }
+Cond: "!led" is cond_code=0x02 & inv=1 { local cond_val:1 = !(st_ZRD || st_SGD); export cond_val; }
+Cond: "gpio0" is cond_code=0x0a & inv=0 { local cond_val:1 = 0; export cond_val; }
+Cond: "!gpio0" is cond_code=0x0a & inv=1 { local cond_val:1 = 1; export cond_val; }
+Cond: "gpio1" is cond_code=0x0b & inv=0 { local cond_val:1 = 0; export cond_val; }
+Cond: "!gpio1" is cond_code=0x0b & inv=1 { local cond_val:1 = 1; export cond_val; }
+Cond: "gpio2" is cond_code=0x0c & inv=0 { local cond_val:1 = 0; export cond_val; }
+Cond: "!gpio2" is cond_code=0x0c & inv=1 { local cond_val:1 = 1; export cond_val; }
+Cond: "zc0" is cond_code=0x10 & inv=0 { local cond_val:1 = !st_ZC0; export cond_val; }
+Cond: "!zc0" is cond_code=0x10 & inv=1 { local cond_val:1 = st_ZC0; export cond_val; }
+Cond: "zc1" is cond_code=0x11 & inv=0 { local cond_val:1 = !st_ZC1; export cond_val; }
+Cond: "!zc1" is cond_code=0x11 & inv=1 { local cond_val:1 = st_ZC1; export cond_val; }
+Cond: "gpio3" is cond_code=0x12 & inv=0 { local cond_val:1 = 0; export cond_val; }
+Cond: "!gpio3" is cond_code=0x12 & inv=1 { local cond_val:1 = 1; export cond_val; }
+Cond: "alw" is cond_code=0x16 & inv=0 { local cond_val:1 = 1; export cond_val; }
+Cond: "!alw" is cond_code=0x16 & inv=1 { local cond_val:1 = 0; export cond_val; }
+
+# Target address subconstructor for branch targets (converts word offset to byte offset)
+target_addr: target is br_target [ target = br_target * 4; ] { export *[code]:4 target; }
+
+
+# ----------------------------------------
+# Instruction Constructors
+# ----------------------------------------
+
+# Dual move AB (lab)
+:^AluPrefix^"lab " Addr0 ", " Addr1_e is op=0 & AluPrefix & (op18=0 | op18=1) & Addr0 & Addr1_e {
+    a = Addr0;
+    b = Addr1_e;
+}
+:^AluPrefix^"lab " Addr0 ", " Addr1_b is op=0 & AluPrefix & op18=3 & Addr0 & Addr1_b {
+    a = Addr0;
+    b = Addr1_b;
+}
+:^AluPrefix^"lab " Addr0_b ", " Addr1 is op=0 & AluPrefix & op18=4 & Addr0_b & Addr1 {
+    a = Addr0_b;
+    b = Addr1;
+}
+
+# LD / MOV Memory-to-Memory
+:^AluPrefix^"mov " Addr0 ", " Addr1_e is op=7 & AluPrefix & (op18=0 | op18=1) & Addr0 & Addr1_e {
+    Addr1_e = Addr0;
+}
+:^AluPrefix^"mov " Addr0_e ", " Addr1 is op=7 & AluPrefix & op18=2 & Addr0_e & Addr1 {
+    Addr1 = Addr0_e;
+}
+:^AluPrefix^"mov " Addr0 ", " Addr1_b is op=7 & AluPrefix & op18=3 & Addr0 & Addr1_b {
+    Addr1_b = Addr0;
+}
+:^AluPrefix^"mov " Addr0_b ", " Addr1 is op=7 & AluPrefix & op18=4 & Addr0_b & Addr1 {
+    Addr1 = Addr0_b;
+}
+:^AluPrefix^"mov " Addr0_o ", " Addr1 is op=7 & AluPrefix & op18=5 & Addr0_o & Addr1 {
+    Addr1 = Addr0_o;
+}
+
+# LD / MOV Register-to-Memory & Memory-to-Register & Register-to-Register
+:^AluPrefix^"mov " reg2 ", " Addr0 is op=7 & AluPrefix & op18=7 & mov_sub=0 & Addr0 & reg2 {
+    Addr0 = reg2;
+}
+:^AluPrefix^"mov " reg2 ", " Addr0_e is op=7 & AluPrefix & op18=7 & mov_sub=1 & Addr0_e & reg2 {
+    Addr0_e = reg2;
+}
+:^AluPrefix^"mov " Addr1_b ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=2 & Addr1_b & reg2 {
+    reg2 = Addr1_b;
+}
+:^AluPrefix^"mov " Addr1 ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=3 & Addr1 & reg2 {
+    reg2 = Addr1;
+}
+:^AluPrefix^"mov " Addr1_e ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=4 & Addr1_e & reg2 {
+    reg2 = Addr1_e;
+}
+:^AluPrefix^"mov " Addr0_o ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=5 & Addr0_o & reg2 {
+    reg2 = Addr0_o;
+}
+:^AluPrefix^"mov " reg1 ", " reg2 is op=7 & AluPrefix & op18=7 & mov_sub=6 & reg1 & reg2 {
+    reg2 = reg1;
+}
+
+# NOP (special case of mov a, - which is parsed as alu update with no transfer)
+# In MAME: if(alu) and (opcode & 0x001fffff) == 0x1f1e10 is 'mov a, -' used as nop
+:^AluPrefix^"mov a, -" is op=7 & AluPrefix & op18=7 & mov_sub=6 & reg1=16 & reg2=15 {}
+
+# stmh instruction
+:stmh is op=0x0d & br_sub=5 {
+    # No p-code action, but models rounding mode selection
+}
+
+# Load 24-bit immediate values (lipl, lia, lib, lid)
+:lipl imm24 is op=0x0e & op0e_sub=0 & imm24 { p = imm24; }
+:lia imm24_s is op=0x0e & op0e_sub=1 & imm24_s { a = imm24_s; }
+:lib imm24_s is op=0x0e & op0e_sub=2 & imm24_s { b = imm24_s; }
+:lid imm24_s is op=0x0e & op0e_sub=3 & imm24_s { d = imm24_s; }
+
+# clr0 combinations
+:^AluPrefix^"clr0" is op=0x0f & AluPrefix & br_sub=0 & clr_a=0 & clr_b=0 & clr_d=0 {}
+:^AluPrefix^"clr0 a" is op=0x0f & AluPrefix & br_sub=0 & clr_a=1 & clr_b=0 & clr_d=0 { a = 0; }
+:^AluPrefix^"clr0 b" is op=0x0f & AluPrefix & br_sub=0 & clr_a=0 & clr_b=1 & clr_d=0 { b = 0; }
+:^AluPrefix^"clr0 d" is op=0x0f & AluPrefix & br_sub=0 & clr_a=0 & clr_b=0 & clr_d=1 { d = 0; }
+:^AluPrefix^"clr0 a, b" is op=0x0f & AluPrefix & br_sub=0 & clr_a=1 & clr_b=1 & clr_d=0 { a = 0; b = 0; }
+:^AluPrefix^"clr0 a, d" is op=0x0f & AluPrefix & br_sub=0 & clr_a=1 & clr_b=0 & clr_d=1 { a = 0; d = 0; }
+:^AluPrefix^"clr0 b, d" is op=0x0f & AluPrefix & br_sub=0 & clr_a=0 & clr_b=1 & clr_d=1 { b = 0; d = 0; }
+:^AluPrefix^"clr0 a, b, d" is op=0x0f & AluPrefix & br_sub=0 & clr_a=1 & clr_b=1 & clr_d=1 { a = 0; b = 0; d = 0; }
+
+# clr1 / set flags
+:^AluPrefix^"clr1" #br_target is op=0x0f & AluPrefix & br_sub=1 & br_target {}
+:^AluPrefix^"set" #br_target is op=0x0f & AluPrefix & br_sub=3 & br_target {}
+
+# rep instruction
+:^AluPrefix^"rep " reg_br is op=0x0f & AluPrefix & br_sub=2 & br_reg_flag=1 & reg_br {}
+:^AluPrefix^"rep " #br_target is op=0x0f & AluPrefix & br_sub=2 & br_reg_flag=0 & br_target {}
+
+# Load Immediate 24-bit to specific registers (ldi)
+:ldi imm24_s ", " reg_ldi is (op >= 0x10 & op <= 0x1f) & reg_ldi & imm24_s {
+    reg_ldi = imm24_s;
+}
+
+# Conditional branches
+:brif Cond ", " target_addr is (op=0x2f | op=0x3f) & br_sub=0 & Cond & target_addr {
+    if (Cond) goto target_addr;
+}
+
+# brul Cond target
+:brul Cond ", " reg_br is (op=0x2f | op=0x3f) & br_sub=1 & br_reg_flag=1 & Cond & reg_br {
+    jmp_temp = reg_br * 4;
+    if (!Cond) goto <skip>;
+    goto [jmp_temp];
+    <skip>
+}
+:brul Cond ", (" Addr0 ")" is (op=0x2f | op=0x3f) & br_sub=1 & br_reg_flag=0 & Cond & Addr0 {
+    jmp_temp = Addr0 * 4;
+    if (!Cond) goto <skip>;
+    goto [jmp_temp];
+    <skip>
+}
+
+# bsif Cond target (call subroutine)
+:bsif Cond ", " target_addr is (op=0x2f | op=0x3f) & br_sub=2 & Cond & target_addr {
+    if (!Cond) goto <skip>;
+    pcs3 = pcs2;
+    pcs2 = pcs1;
+    pcs1 = pcs0;
+    pcs0 = inst_next;
+    call target_addr;
+    <skip>
+}
+
+# bsul Cond target
+:bsul Cond ", " reg_br is (op=0x2f | op=0x3f) & br_sub=3 & br_reg_flag=1 & Cond & reg_br {
+    if (!Cond) goto <skip>;
+    pcs3 = pcs2;
+    pcs2 = pcs1;
+    pcs1 = pcs0;
+    pcs0 = inst_next;
+    jmp_temp = reg_br * 4;
+    call [jmp_temp];
+    <skip>
+}
+:bsul Cond ", (" Addr0 ")" is (op=0x2f | op=0x3f) & br_sub=3 & br_reg_flag=0 & Cond & Addr0 {
+    if (!Cond) goto <skip>;
+    pcs3 = pcs2;
+    pcs2 = pcs1;
+    pcs1 = pcs0;
+    pcs0 = inst_next;
+    jmp_temp = Addr0 * 4;
+    call [jmp_temp];
+    <skip>
+}
+
+# rtif Cond (conditional return)
+:rtif Cond is (op=0x2f | op=0x3f) & br_sub=5 & Cond {
+    if (!Cond) goto <skip>;
+    jmp_temp = pcs0;
+    pcs0 = pcs1;
+    pcs1 = pcs2;
+    pcs2 = pcs3;
+    pcs3 = 0;
+    return [jmp_temp];
+    <skip>
+}
+
+# ldif Cond Addr0, reg2 (conditional load from data memory)
+:ldif Cond ", " Addr0 ", " reg2 is (op=0x2f | op=0x3f) & br_sub=6 & Cond & Addr0 & reg2 {
+    if (!Cond) goto <skip>;
+    reg2 = Addr0;
+    <skip>
+}
+
+# iret (interrupt return)
+:iret is (op=0x2f | op=0x3f) & br_sub=7 {
+    jmp_temp = pcs0;
+    pcs0 = pcs1;
+    pcs1 = pcs2;
+    pcs2 = pcs3;
+    pcs3 = 0;
+    return [jmp_temp];
+}
